@@ -1,0 +1,16 @@
+{
+  "name": "FinCherry",
+  "short_name": "FinCherry",
+  "description": "Personal finance tracker",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B1628",
+  "theme_color": "#F472B6",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

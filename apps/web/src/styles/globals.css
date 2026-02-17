@@ -1,0 +1,113 @@
+@import "tailwindcss";
+
+/* ── FinCherry Design Tokens ──────────────────────────────────────────────
+   Inspired by Deserve fintech branding — bold dark theme, 80s futurism.
+   Cherry Pink is the hero accent. Coral for warnings. Sapphire for charts.
+   ─────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* shadcn/ui CSS variable mapping */
+  --background: 213 52% 7%;          /* Deep Blue #0B1628 */
+  --foreground: 60 5% 94%;           /* White #F0F0EC */
+  --card: 210 45% 13%;               /* Surface Blue #0F2035 */
+  --card-foreground: 60 5% 94%;
+  --popover: 210 45% 13%;
+  --popover-foreground: 60 5% 94%;
+  --primary: 330 86% 70%;            /* Cherry Pink #F472B6 */
+  --primary-foreground: 213 52% 7%;
+  --secondary: 195 76% 24%;          /* Indigo Dye #0D4F6A */
+  --secondary-foreground: 60 5% 94%;
+  --muted: 212 42% 18%;              /* Border-level muted */
+  --muted-foreground: 213 20% 57%;   /* Muted text #7A8BA8 */
+  --accent: 185 68% 32%;             /* Blue Sapphire #1A7A8A */
+  --accent-foreground: 60 5% 94%;
+  --destructive: 12 94% 65%;         /* Coral #F97352 */
+  --destructive-foreground: 60 5% 94%;
+  --border: 212 42% 18%;             /* Border #1A2D45 */
+  --input: 212 42% 18%;
+  --ring: 330 86% 70%;
+  --radius: 0.75rem;
+
+  /* FinCherry raw color tokens (for direct use in components) */
+  --color-deep-blue: #0B1628;
+  --color-surface: #0F2035;
+  --color-surface-hover: #142A42;
+  --color-cherry-pink: #F472B6;
+  --color-cherry-pink-muted: #F472B640;
+  --color-indigo-dye: #0D4F6A;
+  --color-sapphire: #1A7A8A;
+  --color-soft-blue: #8B9EE0;
+  --color-coral: #F97352;
+  --color-white: #F0F0EC;
+  --color-muted: #7A8BA8;
+  --color-border: #1A2D45;
+  --color-green: #2DD4A0;
+
+  /* Font families */
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+/* ── Base styles ──────────────────────────────────────────────────────── */
+
+* {
+  border-color: hsl(var(--border));
+  box-sizing: border-box;
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Monospace numbers — for financial figures */
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* ── Scrollbars ───────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-deep-blue);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-indigo-dye);
+}
+
+/* ── Utility: glass card effect ──────────────────────────────────────── */
+
+.glass {
+  background: rgba(15, 32, 53, 0.8);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* ── Utility: gradient text ──────────────────────────────────────────── */
+
+.gradient-text {
+  background: linear-gradient(135deg, #F472B6, #8B9EE0);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Recharts customization ──────────────────────────────────────────── */
+
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: var(--color-deep-blue) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: 10px !important;
+  color: var(--color-white) !important;
+  font-size: 12px;
+}

@@ -1,0 +1,31 @@
+node_modules/
+dist/
+.env
+*.local
+
+# Uploads (user data)
+apps/api/uploads/
+
+# Database backups
+backups/
+
+# Build artifacts
+apps/web/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# pnpm
+.pnpm-store/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
