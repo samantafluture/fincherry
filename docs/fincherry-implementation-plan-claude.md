@@ -1,7 +1,34 @@
 # FinCherry — Implementation Plan
 
-**Companion to:** fincherry-tdd-claude.md  
-**Approach:** Ship and iterate — get a working end-to-end slice first, then layer features  
+**Companion to:** fincherry-tdd-claude.md
+**Approach:** Ship and iterate — get a working end-to-end slice first, then layer features
+
+---
+
+## Revised Approach — Local First, Deploy Later
+
+> **Decision (Feb 2026):** VPS setup, DNS, SSL, and auto-deploy tasks are deferred until the app is functional and tested locally. Phases 1.1–1.3 (VPS hardening, Docker on VPS, DNS + SSL) are skipped for now. The deploy portion of Phase 3.7 will be revisited once the core app works end-to-end on localhost.
+>
+> **GitHub CI (quality checks) is NOT deferred** — it runs on GitHub without any VPS and should be set up as soon as local dev works (see Phase 1.5).
+
+**Why:** Getting the full stack running locally (API + DB + frontend) lets us iterate on features much faster without dealing with network, SSL, and infra concerns. The Docker Compose config and nginx config are written and ready — deploying is a single session of work once the app is built. But CI (type-check + build on every push) costs nothing and prevents errors from accumulating.
+
+**Revised Phase 1 checklist (local focus):**
+- [x] Project scaffolding (monorepo, packages, config files)
+- [x] Database schema (Drizzle + PostgreSQL)
+- [x] Fastify + tRPC server with auth
+- [x] React frontend with routing and layout shell
+- [ ] Run locally: `pnpm dev:api` + `pnpm dev:web` — see README for full setup
+- [ ] Confirm login works (set passphrase hash in `apps/api/.env`)
+- [ ] Confirm `/api/health` returns OK
+- [ ] Confirm seeded accounts and categories appear in Settings
+- [ ] Set up GitHub CI workflow (Phase 1.5) — push with green checks
+
+**Deferred (do after Phase 2–3 are working locally):**
+- VPS hardening (section 1.1)
+- Docker on VPS (section 1.2)
+- DNS + SSL (section 1.3)
+- GitHub Actions CD — auto-deploy to VPS (section 3.7) — requires VPS to be set up first
 
 ---
 
@@ -236,7 +263,70 @@ trpc.auth.login.useMutation({ passphrase: "your-secret" })
 
 Use `@fastify/cookie` + `jsonwebtoken`. Store the hashed passphrase in the `.env` file, not in the database. tRPC middleware checks the JWT on every request.
 
-**Phase 1 deliverable:** A deployed, SSL-secured Docker Compose stack with auth, an empty database with schema + categories, and a deploy workflow you can repeat.
+**Phase 1 deliverable (local):** Local dev stack runs — API + DB + frontend all working on localhost, login works, seeded data visible in Settings.
+
+---
+
+## Phase 1.5 — GitHub CI (Quality Gates)
+
+**Do this as soon as local dev is working, before Phase 2.** Set up a GitHub Actions workflow that runs on every push and PR. This ensures the TypeScript build and Vite bundle stay clean throughout development — no surprises accumulate.
+
+No VPS, secrets, or infrastructure needed. This runs entirely inside the GitHub Actions runner.
+
+### What CI checks
+
+- **TypeScript** — `tsc --noEmit` on both `apps/api` and `apps/web`
+- **Vite build** — `pnpm --filter web build` catches import errors and missing modules that tsc alone misses
+- **pnpm lockfile integrity** — `--frozen-lockfile` to catch drift
+
+### Workflow file
+
+```yaml
+# .github/workflows/ci.yml
+name: CI
+
+on:
+  push:
+    branches: ['*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  typecheck-and-build:
+    name: Type-check & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check API
+        run: pnpm --filter api exec tsc --noEmit
+
+      - name: Type-check web
+        run: pnpm --filter web exec tsc --noEmit
+
+      - name: Build web (Vite)
+        run: pnpm --filter web build
+```
+
+### How to set up
+
+1. Create `.github/workflows/ci.yml` with the content above.
+2. Push to GitHub (any branch).
+3. Go to the Actions tab — CI should run and pass green.
+
+**Checkpoint:** Every push to GitHub shows a CI status badge. Type errors or broken imports are caught in CI before they pile up. The `main` branch always builds cleanly.
 
 ---
 
@@ -472,7 +562,9 @@ Use Tailwind's responsive utilities (`sm:`, `md:`, `lg:`). Test on your phone.
 
 Use shadcn `Tabs` for the bottom nav styling, or build a simple custom component. Use React Router for routing.
 
-### 3.7 CI/CD with GitHub Actions
+### 3.7 GitHub CD — Auto-deploy to VPS
+
+> **Note:** CI (type-check + build) was already set up in Phase 1.5 and runs on every push. This section adds the **CD** (continuous deploy) step — pushing the built app to the VPS after a successful CI run. Requires VPS to be live first (sections 1.1–1.3).
 
 🧑 **Manual input required:** Set up GitHub Secrets (VPS_HOST, VPS_USER, VPS_SSH_KEY) in your repository settings.
 
@@ -508,7 +600,7 @@ jobs:
             docker compose up -d
 ```
 
-**Phase 3 deliverable:** All three currencies work with automatic conversion. The dashboard shows your real financial data with interactive charts. Push to main auto-deploys.
+**Phase 3 deliverable:** All three currencies work with automatic conversion. The dashboard shows your real financial data with interactive charts. Push to main runs CI checks automatically; CD to VPS is set up if VPS is live.
 
 ---
 
