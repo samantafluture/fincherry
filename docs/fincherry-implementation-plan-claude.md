@@ -1,6 +1,6 @@
 # FinCherry — Implementation Plan
 
-**Companion to:** fincherry-design.md  
+**Companion to:** fincherry-tdd-claude.md  
 **Approach:** Ship and iterate — get a working end-to-end slice first, then layer features  
 
 ---
