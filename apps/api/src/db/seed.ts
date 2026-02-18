@@ -2,7 +2,6 @@
  * Seed script — inserts default categories and the two initial savings goals.
  * Run with: pnpm db:seed
  */
-import 'dotenv/config';
 import { db } from './index.js';
 import { categories, goals, accounts } from './schema.js';
 

@@ -1,12 +1,12 @@
-import { defineConfig } from 'drizzle-kit';
 import fs from 'node:fs';
 import path from 'node:path';
 
-function loadEnvFile(filePath: string): void {
+export function loadEnvFile(filePath = '.env'): void {
   const resolvedPath = path.resolve(process.cwd(), filePath);
   if (!fs.existsSync(resolvedPath)) return;
 
   const envContent = fs.readFileSync(resolvedPath, 'utf8');
+
   for (const rawLine of envContent.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith('#')) continue;
@@ -21,25 +21,10 @@ function loadEnvFile(filePath: string): void {
     const isQuoted =
       (value.startsWith('"') && value.endsWith('"')) ||
       (value.startsWith("'") && value.endsWith("'"));
-    if (isQuoted) value = value.slice(1, -1);
+    if (isQuoted) {
+      value = value.slice(1, -1);
+    }
 
     process.env[key] = value;
   }
 }
-
-loadEnvFile('../../.env');
-loadEnvFile('.env');
-
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) {
-  throw new Error('DATABASE_URL is required for drizzle-kit (set it in root .env or apps/api/.env)');
-}
-
-export default defineConfig({
-  schema: './src/db/schema.ts',
-  out: './src/db/migrations',
-  dialect: 'postgresql',
-  dbCredentials: {
-    url: databaseUrl,
-  },
-});

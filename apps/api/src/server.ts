@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
@@ -7,6 +6,10 @@ import { fastifyTRPCPlugin } from '@trpc/server/adapters/fastify';
 import { appRouter } from './trpc/router.js';
 import { createContext } from './trpc/context.js';
 import { uploadRoutes } from './routes/uploads.js';
+import { loadEnvFile } from './utils/loadEnv.js';
+
+loadEnvFile('../../.env');
+loadEnvFile();
 
 const app = Fastify({
   logger: {

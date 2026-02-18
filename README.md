@@ -35,69 +35,59 @@ Tracks income, expenses, and savings goals across CAD, BRL, and EUR accounts. In
 
 This is the fastest way to iterate locally. The API and web app run natively with hot reload; only the database runs in a container.
 
-#### 1. Install dependencies
+Run all commands in this section from the repo root: `~/Development/fincherry`.
+
+#### 1. Create local env (root `.env`)
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env` and set:
+
+```bash
+# Database
+DB_PASSWORD=change-me-strong-password
+DATABASE_URL=postgresql://fincherry:change-me-strong-password@localhost:5432/fincherry
+
+# Auth
+AUTH_PASSPHRASE_HASH=$2b$12$...
+JWT_SECRET=your-random-secret-min-32-chars
+
+# App
+NODE_ENV=development
+PORT=3000
+
+# Optional (AI features only)
+ANTHROPIC_API_KEY=
+```
+
+Generate `AUTH_PASSPHRASE_HASH` with:
+
+```bash
+pnpm --filter @fincherry/api exec node -e "const b=require('bcryptjs');console.log(b.hashSync('your-passphrase',12))"
+```
+
+#### 2. Install dependencies
 
 ```bash
 pnpm install
 ```
 
-#### 2. Start the database
+#### 3. Start (or recreate) the database
 
 ```bash
-# Start only the db container (no nginx, no api container)
-docker compose up -d db
+docker compose up -d db --force-recreate
+docker compose ps
 ```
 
-The database will be available at `localhost:5432`.
-
-#### 3. Set up environment variables
-
-Create `apps/api/.env` (this file is gitignored):
-
-```bash
-cp .env.example apps/api/.env
-```
-
-Then edit `apps/api/.env` and fill in:
-
-```bash
-# Database
-DATABASE_URL=postgresql://fincherry:change-me-strong-password@localhost:5432/fincherry
-DB_PASSWORD=change-me-strong-password   # must match the password in DATABASE_URL
-
-# Auth — generate a bcrypt hash of your chosen passphrase:
-#   node -e "const b=require('bcryptjs');console.log(b.hashSync('your-passphrase',12))"
-AUTH_PASSPHRASE_HASH=$2b$12$...
-
-# JWT — any random string, min 32 chars
-JWT_SECRET=dev-secret-change-this-in-production-32chars
-
-# Optional — needed only for AI features
-ANTHROPIC_API_KEY=sk-ant-...
-
-NODE_ENV=development
-PORT=3000
-```
-
-> **Note on DB_PASSWORD:** The Docker Compose `db` service uses `DB_PASSWORD` to create the PostgreSQL user. It must match the password in `DATABASE_URL`. The default value in `docker-compose.yml` is read from `.env` at the **root** of the repo. For local dev, you can either create a root `.env` with `DB_PASSWORD=...`, or pass it inline when starting the container.
-
-The simplest approach — create a root `.env` (gitignored) with just the password:
-
-```bash
-echo "DB_PASSWORD=change-me-strong-password" > .env
-```
-
-Then start the db again so it picks up the password:
-
-```bash
-docker compose up -d db
-```
+Confirm `db` is healthy and has a host port mapping like `0.0.0.0:5432->5432/tcp`.
 
 #### 4. Run database migrations and seed
 
 ```bash
 # Push the Drizzle schema to the database (creates all tables)
-pnpm db:push
+pnpm --filter @fincherry/api db:push
 
 # Seed default categories, savings goals, and accounts
 pnpm db:seed
@@ -123,7 +113,24 @@ The app will be available at:
 
 #### 6. Log in
 
-Go to http://localhost:5173 — you'll see the login screen. Enter the passphrase you chose in step 3.
+Go to http://localhost:5173 — you'll see the login screen. Enter the passphrase you chose in step 1.
+
+#### 7. If something fails, rerun these commands
+
+- `relation "categories" does not exist`:
+  - Run `pnpm --filter @fincherry/api db:push`, then `pnpm db:seed`.
+- `password authentication failed for user "fincherry"`:
+  - Your DB container was initialized with a different password.
+  - Run:
+    ```bash
+    docker compose down -v
+    docker compose up -d db
+    pnpm --filter @fincherry/api db:push
+    pnpm db:seed
+    ```
+- `ECONNREFUSED 127.0.0.1:5432`:
+  - DB is not reachable from host.
+  - Run `docker compose up -d db --force-recreate`, then check `docker compose ps`.
 
 ---
 
@@ -141,7 +148,7 @@ Root `.env` (read by Docker Compose):
 cat > .env << 'EOF'
 DB_PASSWORD=change-me-strong-password
 JWT_SECRET=dev-secret-change-this-in-production-32chars
-AUTH_PASSPHRASE_HASH=$2b$12$...  # generate with bcryptjs (see Option A step 3)
+AUTH_PASSPHRASE_HASH=$2b$12$...  # generate with bcryptjs (see Option A step 1)
 ANTHROPIC_API_KEY=sk-ant-...     # optional
 NODE_ENV=production
 PORT=3000
@@ -173,7 +180,7 @@ docker compose exec api node dist/db/seed.js
 Or push the schema with drizzle-kit from your local machine (pointing at the container's port, if you expose it):
 
 ```bash
-DATABASE_URL=postgresql://fincherry:change-me@localhost:5432/fincherry pnpm db:push
+DATABASE_URL=postgresql://fincherry:change-me@localhost:5432/fincherry pnpm --filter @fincherry/api db:push
 pnpm db:seed
 ```
 
@@ -195,7 +202,7 @@ psql postgres -c "CREATE USER fincherry WITH PASSWORD 'localpass';"
 psql postgres -c "CREATE DATABASE fincherry OWNER fincherry;"
 ```
 
-Then set `DATABASE_URL=postgresql://fincherry:localpass@localhost:5432/fincherry` in `apps/api/.env` and follow Option A from step 4.
+Then set `DATABASE_URL=postgresql://fincherry:localpass@localhost:5432/fincherry` in root `.env` and follow Option A from step 4.
 
 ---
 
@@ -207,7 +214,7 @@ pnpm dev:api          # Fastify API with tsx watch (hot reload)
 pnpm dev:web          # Vite dev server (HMR)
 
 # Database
-pnpm db:push          # Push Drizzle schema to DB (dev — no migration files)
+pnpm --filter @fincherry/api db:push  # Push Drizzle schema to DB (dev — no migration files)
 pnpm db:generate      # Generate migration files (for production)
 pnpm db:migrate       # Run migrations
 pnpm db:seed          # Insert default categories, goals, and accounts
@@ -261,10 +268,11 @@ fincherry/
 FinCherry uses simple passphrase auth (single user). To generate your passphrase hash:
 
 ```bash
-node -e "const b=require('bcryptjs');console.log(b.hashSync('your-chosen-passphrase',12))"
+pnpm --filter @fincherry/api exec node -e "const b=require('bcryptjs');console.log(b.hashSync('your-chosen-passphrase',12))"
 ```
 
 Paste the output into `AUTH_PASSPHRASE_HASH` in your `.env`. The hash is safe to commit to `.env.example` placeholders but **never commit the actual hash** — it's in `.gitignore`.
+At login, enter the original plain passphrase you chose, not the hash string.
 
 ---
 
