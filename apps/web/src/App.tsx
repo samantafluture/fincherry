@@ -1,15 +1,38 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { trpc, createTRPCClient } from '@/lib/trpc';
 import { AppShell } from '@/components/layout/AppShell';
-import { LoginPage } from '@/pages/Login';
-import { DashboardPage } from '@/pages/Dashboard';
-import { TransactionsPage } from '@/pages/Transactions';
-import { UploadPage } from '@/pages/Upload';
-import { GoalsPage } from '@/pages/Goals';
-import { AIPage } from '@/pages/AI';
-import { SettingsPage } from '@/pages/Settings';
+
+const LoginPage = lazy(() =>
+  import('@/pages/Login').then((m) => ({ default: m.LoginPage })),
+);
+const DashboardPage = lazy(() =>
+  import('@/pages/Dashboard').then((m) => ({ default: m.DashboardPage })),
+);
+const TransactionsPage = lazy(() =>
+  import('@/pages/Transactions').then((m) => ({ default: m.TransactionsPage })),
+);
+const UploadPage = lazy(() =>
+  import('@/pages/Upload').then((m) => ({ default: m.UploadPage })),
+);
+const GoalsPage = lazy(() =>
+  import('@/pages/Goals').then((m) => ({ default: m.GoalsPage })),
+);
+const AIPage = lazy(() =>
+  import('@/pages/AI').then((m) => ({ default: m.AIPage })),
+);
+const SettingsPage = lazy(() =>
+  import('@/pages/Settings').then((m) => ({ default: m.SettingsPage })),
+);
+
+function RouteLoader() {
+  return (
+    <div className="min-h-screen bg-[var(--color-deep-blue)] flex items-center justify-center">
+      <div className="text-[var(--color-muted)] text-sm animate-pulse">Loading...</div>
+    </div>
+  );
+}
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { data, isLoading } = trpc.auth.verify.useQuery();
@@ -45,7 +68,14 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <Routes>
-            <Route path="/login" element={<LoginPage />} />
+            <Route
+              path="/login"
+              element={(
+                <Suspense fallback={<RouteLoader />}>
+                  <LoginPage />
+                </Suspense>
+              )}
+            />
             <Route
               element={
                 <AuthGuard>
@@ -53,12 +83,54 @@ export default function App() {
                 </AuthGuard>
               }
             >
-              <Route path="/" element={<DashboardPage />} />
-              <Route path="/transactions" element={<TransactionsPage />} />
-              <Route path="/upload" element={<UploadPage />} />
-              <Route path="/goals" element={<GoalsPage />} />
-              <Route path="/ai" element={<AIPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
+              <Route
+                path="/"
+                element={(
+                  <Suspense fallback={<RouteLoader />}>
+                    <DashboardPage />
+                  </Suspense>
+                )}
+              />
+              <Route
+                path="/transactions"
+                element={(
+                  <Suspense fallback={<RouteLoader />}>
+                    <TransactionsPage />
+                  </Suspense>
+                )}
+              />
+              <Route
+                path="/upload"
+                element={(
+                  <Suspense fallback={<RouteLoader />}>
+                    <UploadPage />
+                  </Suspense>
+                )}
+              />
+              <Route
+                path="/goals"
+                element={(
+                  <Suspense fallback={<RouteLoader />}>
+                    <GoalsPage />
+                  </Suspense>
+                )}
+              />
+              <Route
+                path="/ai"
+                element={(
+                  <Suspense fallback={<RouteLoader />}>
+                    <AIPage />
+                  </Suspense>
+                )}
+              />
+              <Route
+                path="/settings"
+                element={(
+                  <Suspense fallback={<RouteLoader />}>
+                    <SettingsPage />
+                  </Suspense>
+                )}
+              />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>

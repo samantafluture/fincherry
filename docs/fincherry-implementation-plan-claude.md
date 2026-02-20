@@ -602,7 +602,7 @@ jobs:
 
 **Phase 3 deliverable:** All three currencies work with automatic conversion. The dashboard shows your real financial data with interactive charts. Push to main runs CI checks automatically; CD to VPS is set up if VPS is live.
 
-> **Deferred polish note (from Phase 3 builds):** `pnpm --filter web build` currently reports a non-blocking Vite warning for a chunk above 500 kB after minification. Track this in Phase 5 performance polish using route-level lazy loading and/or `manualChunks`.
+> **Phase 3 polish update (Feb 2026):** route-level lazy loading was added in the web app, and the previous Vite `chunk above 500 kB` warning no longer appears in local builds. Keep bundle-size monitoring as a Phase 5 optimization task.
 
 ---
 
