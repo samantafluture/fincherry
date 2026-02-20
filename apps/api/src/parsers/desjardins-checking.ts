@@ -118,10 +118,19 @@ export class DesjardinsCheckingParser implements StatementParser {
       .slice(0, 6)
       .map(normalizeSpaces);
 
-    const tsRowsRaw = extractTsAmountRows(lines).slice(26);
-    // TS section: opening balance + 6 transaction rows
-    const tsOpening = tsRowsRaw[0]?.amount ?? 0;
-    const tsRows = tsRowsRaw.slice(1, 7);
+    const savingsRows = extractTsAmountRows(lines).slice(26);
+    // TS1 section: opening balance + 6 transaction rows
+    const ts1Opening = savingsRows[0]?.amount ?? 0;
+    const ts1Rows = savingsRows.slice(1, 7);
+
+    // TS2 section: in some extracts the opening balance is omitted.
+    const ts2Chunk = savingsRows.slice(7);
+    const hasTs2Opening = ts2Chunk.length >= 7;
+    const ts2Rows = hasTs2Opening ? ts2Chunk.slice(1, 7) : ts2Chunk.slice(0, 6);
+    const ts2Opening =
+      hasTs2Opening
+        ? (ts2Chunk[0]?.amount ?? 0)
+        : ((ts2Rows[0]?.balance ?? 0) - (ts2Rows[0]?.amount ?? 0));
 
     const parsed: ParsedTransaction[] = [];
 
@@ -140,19 +149,34 @@ export class DesjardinsCheckingParser implements StatementParser {
       pcaPrev = row.balance;
     }
 
-    let tsPrev = tsOpening;
-    for (let i = 0; i < Math.min(tsCodes.length, tsDescriptionLines.length, tsRows.length); i++) {
+    let ts1Prev = ts1Opening;
+    for (let i = 0; i < Math.min(tsCodes.length, tsDescriptionLines.length, ts1Rows.length); i++) {
       const code = tsCodes[i]!;
-      const desc = tsDescriptionLines[i]!;
-      const row = tsRows[i]!;
-      const signedAmount = signFromBalanceDelta(tsPrev, row.balance, row.amount);
+      const desc = `${tsDescriptionLines[i]!} (TS 1)`;
+      const row = ts1Rows[i]!;
+      const signedAmount = signFromBalanceDelta(ts1Prev, row.balance, row.amount);
       parsed.push({
         date: parseDate(code.day, year),
         description: desc,
         amount: Number(signedAmount.toFixed(2)),
         currency: 'CAD',
       });
-      tsPrev = row.balance;
+      ts1Prev = row.balance;
+    }
+
+    let ts2Prev = ts2Opening;
+    for (let i = 0; i < Math.min(tsCodes.length, tsDescriptionLines.length, ts2Rows.length); i++) {
+      const code = tsCodes[i]!;
+      const desc = `${tsDescriptionLines[i]!} (TS 2)`;
+      const row = ts2Rows[i]!;
+      const signedAmount = signFromBalanceDelta(ts2Prev, row.balance, row.amount);
+      parsed.push({
+        date: parseDate(code.day, year),
+        description: desc,
+        amount: Number(signedAmount.toFixed(2)),
+        currency: 'CAD',
+      });
+      ts2Prev = row.balance;
     }
 
     return parsed;

@@ -30,6 +30,18 @@ const tooltipStyle = {
     color: C.white,
     fontSize: 12,
   },
+  labelStyle: {
+    color: C.white,
+    fontSize: 11,
+    fontWeight: 600,
+  },
+  itemStyle: {
+    color: C.white,
+    fontSize: 11,
+  },
+  cursor: {
+    fill: 'rgba(244, 114, 182, 0.08)',
+  },
 };
 
 const DATE_PRESETS = ['This month', '3 months', '6 months', 'YTD'] as const;
@@ -194,39 +206,44 @@ export function DashboardPage() {
         <Card>
           <SectionTitle>Where Your Money Goes</SectionTitle>
           {byCategory && byCategory.length > 0 ? (
-            <div className="flex items-center gap-3 flex-wrap">
-              <ResponsiveContainer width={120} height={120} className="shrink-0">
-                <PieChart>
-                  <Pie
-                    data={byCategory}
-                    dataKey="amount"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={35}
-                    outerRadius={55}
-                    strokeWidth={0}
-                  >
-                    {byCategory.map((c, i) => (
-                      <Cell key={i} fill={c.color ?? C.muted} />
-                    ))}
-                  </Pie>
-                  <Tooltip {...tooltipStyle} formatter={(v: number) => [`$${v}`, undefined]} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex-1 min-w-[140px] space-y-1">
+            <div className="space-y-3">
+              <div className="mx-auto w-full max-w-[220px]">
+                <ResponsiveContainer width="100%" height={150}>
+                  <PieChart>
+                    <Pie
+                      data={byCategory}
+                      dataKey="amount"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={40}
+                      outerRadius={62}
+                      strokeWidth={0}
+                    >
+                      {byCategory.map((c, i) => (
+                        <Cell key={i} fill={c.color ?? C.muted} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      {...tooltipStyle}
+                      formatter={(v: number, label) => [formatCAD(v), String(label ?? '')]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="grid grid-cols-1 gap-1.5">
                 {byCategory.slice(0, 6).map((c) => (
                   <div key={c.name} className="flex items-center justify-between text-[11px]">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
                       <div
                         className="w-2 h-2 rounded-sm shrink-0"
                         style={{ background: c.color ?? C.muted }}
                       />
-                      <span className="text-[var(--color-white)]">{c.name}</span>
+                      <span className="text-[var(--color-white)] truncate">{c.name}</span>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 shrink-0">
                       <span className="text-[var(--color-muted)] font-mono">{c.pct}%</span>
-                      <span className="text-[var(--color-white)] font-mono min-w-[44px] text-right">
-                        ${c.amount}
+                      <span className="text-[var(--color-white)] font-mono min-w-[68px] text-right">
+                        {formatCAD(c.amount)}
                       </span>
                     </div>
                   </div>

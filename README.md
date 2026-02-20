@@ -96,6 +96,10 @@ pnpm --filter @fincherry/api db:push
 
 # Seed default categories, savings goals, and accounts
 pnpm db:seed
+
+# Optional after taxonomy updates:
+# backfill only uncategorized transactions (plus legacy Delivery -> Food Delivery)
+pnpm db:backfill-categories
 ```
 
 #### 5. Start the development servers
@@ -136,6 +140,12 @@ Go to http://localhost:5173 — you'll see the login screen. Enter the passphras
 - `ECONNREFUSED 127.0.0.1:5432`:
   - DB is not reachable from host.
   - Run `docker compose up -d db --force-recreate`, then check `docker compose ps`.
+- `Upload/transactions show outdated category names after pulling latest changes`:
+  - Run:
+    ```bash
+    pnpm db:seed
+    pnpm db:backfill-categories
+    ```
 
 ---
 
@@ -225,6 +235,7 @@ pnpm --filter @fincherry/api db:push  # Push Drizzle schema to DB (dev — no mi
 pnpm db:generate      # Generate migration files (for production)
 pnpm db:migrate       # Run migrations
 pnpm db:seed          # Insert default categories, goals, and accounts
+pnpm db:backfill-categories  # Backfill uncategorized tx after category tree updates
 pnpm db:studio        # Open Drizzle Studio (visual DB browser) at localhost:4983
 
 # Build

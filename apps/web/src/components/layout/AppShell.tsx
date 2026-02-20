@@ -1,5 +1,15 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ArrowLeftRight, Upload, Target, Sparkles, Settings, type LucideIcon } from 'lucide-react';
+import { useState } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import {
+  LayoutDashboard,
+  ArrowLeftRight,
+  Upload,
+  Target,
+  Sparkles,
+  Settings,
+  PanelLeft,
+  type LucideIcon,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { trpc } from '@/lib/trpc';
 
@@ -17,15 +27,23 @@ const NAV_ITEMS: Array<{
 ];
 
 export function AppShell() {
+  const location = useLocation();
   const navigate = useNavigate();
+  const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const logout = trpc.auth.logout.useMutation({
     onSuccess: () => navigate('/login'),
   });
+  const isTransactionsView = location.pathname.startsWith('/transactions');
 
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--color-deep-blue)]">
       {/* ── Desktop Sidebar ─────────────────────────────────────────────── */}
-      <aside className="hidden lg:flex flex-col w-56 shrink-0 border-r border-[var(--color-border)] bg-[var(--color-surface)]">
+      <aside
+        className={cn(
+          'hidden lg:flex flex-col w-56 shrink-0 border-r border-[var(--color-border)] bg-[var(--color-surface)]',
+          !isDesktopSidebarOpen && 'lg:hidden',
+        )}
+      >
         {/* Logo */}
         <div className="px-6 py-5 border-b border-[var(--color-border)]">
           <span className="text-lg font-semibold tracking-tight text-[var(--color-white)]">
@@ -82,6 +100,24 @@ export function AppShell() {
 
       {/* ── Main content ─────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Desktop header */}
+        <header className="hidden lg:flex sticky top-0 z-10 items-center justify-between px-5 py-3 border-b border-[var(--color-border)] bg-[var(--color-surface)]">
+          <button
+            type="button"
+            onClick={() => setIsDesktopSidebarOpen((prev) => !prev)}
+            className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs font-medium text-[var(--color-muted)] hover:text-[var(--color-white)] hover:bg-[var(--color-surface-hover)] transition-colors"
+          >
+            <PanelLeft size={14} />
+            {isDesktopSidebarOpen ? 'Hide Menu' : 'Show Menu'}
+          </button>
+          <NavLink
+            to="/settings"
+            className="text-[var(--color-muted)] hover:text-[var(--color-white)] transition-colors"
+          >
+            <Settings size={16} />
+          </NavLink>
+        </header>
+
         {/* Mobile header */}
         <header className="lg:hidden glass sticky top-0 z-10 flex items-center justify-between px-5 py-3 border-b border-[var(--color-border)]">
           <span className="text-base font-semibold text-[var(--color-white)]">
@@ -97,7 +133,14 @@ export function AppShell() {
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-[800px] px-4 py-5 pb-24 lg:pb-6">
+          <div
+            className={cn(
+              'mx-auto w-full py-5 pb-24 lg:pb-6',
+              isTransactionsView
+                ? 'max-w-[1500px] px-3 lg:px-5'
+                : 'max-w-[980px] px-4',
+            )}
+          >
             <Outlet />
           </div>
         </main>

@@ -13,16 +13,29 @@ export const categoriesRouter = router({
   }),
 
   listTree: protectedProcedure.query(async () => {
+    const ACTIVE_ROOTS = new Set(['Income', 'Expense', 'Transfer', 'Other']);
     const all = await db.query.categories.findMany({
-      orderBy: (c, { asc }) => [asc(c.sortOrder)],
+      orderBy: (c, { asc }) => [asc(c.sortOrder), asc(c.name)],
     });
+    type CategoryTreeNode = (typeof all)[number] & { children: CategoryTreeNode[] };
 
-    // Build tree structure
-    const roots = all.filter((c) => c.parentId === null);
-    return roots.map((root) => ({
-      ...root,
-      children: all.filter((c) => c.parentId === root.id),
-    }));
+    const byParent = new Map<string | null, typeof all>();
+    for (const category of all) {
+      const key = category.parentId;
+      const siblings = byParent.get(key) ?? [];
+      siblings.push(category);
+      byParent.set(key, siblings);
+    }
+
+    const buildTree = (parentId: string | null): CategoryTreeNode[] => {
+      const children = byParent.get(parentId) ?? [];
+      return children.map((child) => ({
+        ...child,
+        children: buildTree(child.id),
+      }));
+    };
+
+    return buildTree(null).filter((root) => ACTIVE_ROOTS.has(root.name));
   }),
 
   create: protectedProcedure

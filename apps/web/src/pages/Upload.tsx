@@ -46,8 +46,8 @@ export function UploadPage() {
 
     try {
       const formData = new FormData();
-      formData.append('file', file);
       formData.append('account_id', accountId);
+      formData.append('file', file);
 
       const res = await fetch('/api/uploads', {
         method: 'POST',

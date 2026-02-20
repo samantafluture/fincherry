@@ -29,27 +29,40 @@ export async function uploadRoutes(app: FastifyInstance) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
 
-    const data = await req.file({ limits: { fileSize: MAX_FILE_SIZE } });
-    if (!data) {
+    let accountId: string | null = null;
+    let filename: string | null = null;
+    let fileBuffer: Buffer | null = null;
+
+    const parts = req.parts({ limits: { fileSize: MAX_FILE_SIZE } });
+    for await (const part of parts) {
+      if (part.type === 'field') {
+        if (
+          (part.fieldname === 'account_id' || part.fieldname === 'accountId') &&
+          typeof part.value === 'string' &&
+          part.value.trim()
+        ) {
+          accountId = part.value.trim();
+        }
+        continue;
+      }
+
+      if (part.type === 'file' && part.fieldname === 'file' && !fileBuffer) {
+        filename = part.filename;
+        const chunks: Buffer[] = [];
+        for await (const chunk of part.file) {
+          chunks.push(chunk as Buffer);
+        }
+        fileBuffer = Buffer.concat(chunks);
+      }
+    }
+
+    if (!fileBuffer || !filename) {
       return reply.status(400).send({ error: 'No file provided' });
     }
 
-    const accountId = data.fields['account_id'];
-    if (
-      !accountId ||
-      typeof accountId !== 'object' ||
-      !('value' in accountId) ||
-      typeof accountId.value !== 'string'
-    ) {
+    if (!accountId) {
       return reply.status(400).send({ error: 'account_id field is required' });
     }
-
-    // Read the file buffer
-    const chunks: Buffer[] = [];
-    for await (const chunk of data.file) {
-      chunks.push(chunk as Buffer);
-    }
-    const fileBuffer = Buffer.concat(chunks);
 
     // Validate PDF magic bytes.
     // Some valid PDFs may include a short prefix before %PDF, so scan the first chunk.
@@ -60,20 +73,20 @@ export async function uploadRoutes(app: FastifyInstance) {
     // Save file to uploads directory
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
     const timestamp = Date.now();
-    const filename = `${timestamp}-${data.filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-    const filePath = path.join(UPLOADS_DIR, filename);
+    const safeFilename = `${timestamp}-${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const filePath = path.join(UPLOADS_DIR, safeFilename);
     fs.writeFileSync(filePath, fileBuffer);
 
     // Create upload record
     const [upload] = await db
       .insert(uploads)
       .values({
-        filename,
-        accountId: accountId.value,
+        filename: safeFilename,
+        accountId,
         status: 'pending',
       })
       .returning();
 
-    return reply.status(201).send({ uploadId: upload!.id, filename });
+    return reply.status(201).send({ uploadId: upload!.id, filename: safeFilename });
   });
 }

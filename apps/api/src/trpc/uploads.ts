@@ -1,11 +1,10 @@
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { router, protectedProcedure } from './trpc.js';
 import { db } from '../db/index.js';
 import {
   uploads,
   transactions,
-  categories,
   goals,
   goalSnapshots,
   type Account,
@@ -13,6 +12,12 @@ import {
 import { parserRegistry } from '../parsers/registry.js';
 import { categorizerService } from '../services/categorizer.js';
 import { convertToCad } from '../services/currencyConverter.js';
+import {
+  SYSTEM_CATEGORY_PATHS,
+  inferSystemCategoryPath,
+  normalizeTransferTag,
+  resolveCategoryIdsByPath,
+} from '../services/systemCategoryMapping.js';
 import pdfParse from 'pdf-parse';
 import fs from 'fs';
 import path from 'path';
@@ -20,16 +25,87 @@ import crypto from 'crypto';
 
 const TS1_GOAL_NAME = 'Moving / House';
 const TS2_GOAL_NAME = 'Private Health Fund';
-const SAVINGS_TRANSFER_CATEGORY_NAME = 'Savings Transfer';
-
-function normalizeTransferTag(description: string): 'ts1' | 'ts2' | null {
-  if (/\bto\s+TS\s*1\b/i.test(description)) return 'ts1';
-  if (/\bto\s+TS\s*2\b/i.test(description)) return 'ts2';
-  return null;
-}
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function normalizeDescriptionForDedupe(description: string): string {
+  return description
+    .replace(/\s+\(TS\s*[12]\)\s*$/i, '')
+    .trim()
+    .toLowerCase();
+}
+
+function parseSpacedAmount(raw: string): number {
+  return Number(raw.replace(/\s+/g, '').replace(/,/g, ''));
+}
+
+function monthToNumber(month: string): number | null {
+  const key = month.toLowerCase();
+  const months: Record<string, number> = {
+    january: 1,
+    february: 2,
+    march: 3,
+    april: 4,
+    may: 5,
+    june: 6,
+    july: 7,
+    august: 8,
+    september: 9,
+    october: 10,
+    november: 11,
+    december: 12,
+  };
+  return months[key] ?? null;
+}
+
+function extractDesjardinsSavingsBalances(text: string):
+  | { snapshotDate: string; ts1Balance: number; ts2Balance: number }
+  | null {
+  const periodMatch = text.match(
+    /From\s+([A-Za-z]+)\s+\d{1,2}\s+to\s+([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})/i,
+  );
+  if (!periodMatch) return null;
+
+  const endMonth = monthToNumber(periodMatch[2] ?? '');
+  const endDay = Number(periodMatch[3]);
+  const year = Number(periodMatch[4]);
+  if (!endMonth || !endDay || !year) return null;
+
+  const snapshotDate = `${year}-${String(endMonth).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`;
+
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const amountRows = lines
+    .map((line) => {
+      const m = line.match(
+        /^(\d{1,3}(?:\s\d{3})*(?:\.\d{2})?)\s+(\d{1,3}(?:\s\d{3})*\.\d{2})$/,
+      );
+      if (!m) return null;
+      return {
+        amount: parseSpacedAmount(m[1] ?? '0'),
+        balance: parseSpacedAmount(m[2] ?? '0'),
+      };
+    })
+    .filter((row): row is { amount: number; balance: number } => row !== null);
+
+  // Desjardins account statement structure in this project:
+  // - 26 rows for PCA section (opening + 25 tx)
+  // - TS1 rows are next (opening + 6 tx)
+  // - TS2 rows follow; in some extracted PDFs TS2 opening line is not captured,
+  //   so we use the last TS row as the final TS2 balance.
+  const savingsRows = amountRows.slice(26);
+  if (savingsRows.length < 13) return null;
+
+  const ts1Balance = savingsRows[6]?.balance;
+  const ts2Balance = savingsRows[savingsRows.length - 1]?.balance;
+  if (ts1Balance === undefined || ts2Balance === undefined) return null;
+
+  return { snapshotDate, ts1Balance, ts2Balance };
 }
 
 export const uploadsRouter = router({
@@ -85,7 +161,7 @@ export const uploadsRouter = router({
           (tx) =>
             `${tx.date}|${tx.amount}|${crypto
               .createHash('md5')
-              .update(tx.description.trim().toLowerCase())
+              .update(normalizeDescriptionForDedupe(tx.description))
               .digest('hex')}`,
         ),
       );
@@ -93,28 +169,24 @@ export const uploadsRouter = router({
       const suggestions = await categorizerService.suggestBatch(
         parsed.map((p) => p.description),
       );
-
-      const savingsTransferCategoryId =
-        (
-          await db.query.categories.findFirst({
-            where: eq(categories.name, SAVINGS_TRANSFER_CATEGORY_NAME),
-          })
-        )?.id ?? null;
+      const systemCategoryIdsByPath = await resolveCategoryIdsByPath(
+        Object.values(SYSTEM_CATEGORY_PATHS),
+      );
 
       return parsed.map((tx, i) => {
         const descHash = crypto
           .createHash('md5')
-          .update(tx.description.trim().toLowerCase())
+          .update(normalizeDescriptionForDedupe(tx.description))
           .digest('hex');
         const key = `${tx.date}|${tx.amount}|${descHash}`;
-        const transferTag = normalizeTransferTag(tx.description);
+        const systemCategoryPath = inferSystemCategoryPath(tx.description, tx.amount);
+        const systemCategoryId =
+          (systemCategoryPath ? systemCategoryIdsByPath.get(systemCategoryPath) : null) ?? null;
+
         return {
           ...tx,
           isDuplicate: existingKeys.has(key),
-          suggestedCategoryId:
-            transferTag && savingsTransferCategoryId
-              ? savingsTransferCategoryId
-              : (suggestions[i] ?? null),
+          suggestedCategoryId: systemCategoryId ?? (suggestions[i] ?? null),
         };
       });
     }),
@@ -155,6 +227,10 @@ export const uploadsRouter = router({
       if (!parser) throw new Error(`No parser for: ${parserKey}`);
 
       const parsed = parser.parse(text);
+      const savingsBalances =
+        parserKey === 'desjardins-checking'
+          ? extractDesjardinsSavingsBalances(text)
+          : null;
 
       // Category overrides map
       const overrideMap = new Map(input.categoryOverrides.map((o) => [o.index, o.categoryId]));
@@ -162,13 +238,9 @@ export const uploadsRouter = router({
       const suggestions = await categorizerService.suggestBatch(
         parsed.map((p) => p.description),
       );
-
-      const savingsTransferCategoryId =
-        (
-          await db.query.categories.findFirst({
-            where: eq(categories.name, SAVINGS_TRANSFER_CATEGORY_NAME),
-          })
-        )?.id ?? null;
+      const systemCategoryIdsByPath = await resolveCategoryIdsByPath(
+        Object.values(SYSTEM_CATEGORY_PATHS),
+      );
 
       const transferGoals = await db.query.goals.findMany({
         where: (g, { or, eq }) =>
@@ -206,7 +278,7 @@ export const uploadsRouter = router({
           (tx) =>
             `${tx.date}|${tx.amount}|${crypto
               .createHash('md5')
-              .update(tx.description.trim().toLowerCase())
+              .update(normalizeDescriptionForDedupe(tx.description))
               .digest('hex')}`,
         ),
       );
@@ -218,7 +290,7 @@ export const uploadsRouter = router({
         const tx = parsed[i]!;
         const descHash = crypto
           .createHash('md5')
-          .update(tx.description.trim().toLowerCase())
+          .update(normalizeDescriptionForDedupe(tx.description))
           .digest('hex');
 
         const dedupeKey = `${tx.date}|${tx.amount}|${descHash}`;
@@ -230,11 +302,13 @@ export const uploadsRouter = router({
         }
 
         const transferTag = normalizeTransferTag(tx.description);
+        const systemCategoryPath = inferSystemCategoryPath(tx.description, tx.amount);
+        const systemCategoryId =
+          (systemCategoryPath ? systemCategoryIdsByPath.get(systemCategoryPath) : null) ?? null;
         const categoryId =
           overrideMap.get(i) ??
-          (transferTag && savingsTransferCategoryId
-            ? savingsTransferCategoryId
-            : (suggestions[i] ?? null));
+          systemCategoryId ??
+          (suggestions[i] ?? null);
 
         // Convert to CAD
         const { amountCad, rate } = await convertToCad(
@@ -258,7 +332,7 @@ export const uploadsRouter = router({
 
         existingKeys.add(dedupeKey);
 
-        if (transferTag) {
+        if (transferTag && !savingsBalances) {
           const goalState = goalStateByTag.get(transferTag);
           if (goalState) {
             goalState.currentAmount = round2(goalState.currentAmount + Math.abs(tx.amount));
@@ -273,6 +347,44 @@ export const uploadsRouter = router({
         }
 
         imported++;
+      }
+
+      if (savingsBalances) {
+        const snapshotEntries: Array<{ tag: 'ts1' | 'ts2'; balance: number }> = [
+          { tag: 'ts1', balance: savingsBalances.ts1Balance },
+          { tag: 'ts2', balance: savingsBalances.ts2Balance },
+        ];
+
+        for (const entry of snapshotEntries) {
+          const goalState = goalStateByTag.get(entry.tag);
+          if (!goalState) continue;
+
+          const existingSnapshot = await db.query.goalSnapshots.findFirst({
+            where: and(
+              eq(goalSnapshots.goalId, goalState.id),
+              eq(goalSnapshots.snapshotDate, savingsBalances.snapshotDate),
+            ),
+          });
+
+          if (existingSnapshot) {
+            await db
+              .update(goalSnapshots)
+              .set({
+                currentAmount: String(entry.balance),
+                targetAmount: String(goalState.targetAmount),
+                notes: `Auto from Desjardins savings table (${entry.tag.toUpperCase()})`,
+              })
+              .where(eq(goalSnapshots.id, existingSnapshot.id));
+          } else {
+            await db.insert(goalSnapshots).values({
+              goalId: goalState.id,
+              snapshotDate: savingsBalances.snapshotDate,
+              currentAmount: String(entry.balance),
+              targetAmount: String(goalState.targetAmount),
+              notes: `Auto from Desjardins savings table (${entry.tag.toUpperCase()})`,
+            });
+          }
+        }
       }
 
       await db

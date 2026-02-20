@@ -14,6 +14,7 @@
     "db:generate": "pnpm --filter api db:generate",
     "db:migrate": "pnpm --filter api db:migrate",
     "db:seed": "pnpm --filter api db:seed",
+    "db:backfill-categories": "pnpm --filter @fincherry/api db:backfill-categories",
     "db:studio": "pnpm --filter api db:studio"
   },
   "devDependencies": {

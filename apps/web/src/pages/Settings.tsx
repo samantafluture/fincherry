@@ -1,6 +1,17 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
+import {
+  buildCategoryPathMap,
+  getLeafCategoryIds,
+  isActiveCategoryPath,
+} from '@/lib/categoryPaths';
+
+type CategoryTreeNode = {
+  id: string;
+  name: string;
+  children?: CategoryTreeNode[];
+};
 
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<'accounts' | 'categories' | 'rules'>('accounts');
@@ -75,24 +86,26 @@ function AccountsSettings() {
 function CategoriesSettings() {
   const { data: tree } = trpc.categories.listTree.useQuery();
 
+  const renderNode = (node: CategoryTreeNode, depth = 0) => (
+    <div key={node.id} className="space-y-1">
+      <div
+        className="text-sm"
+        style={{
+          color: depth === 0 ? 'var(--color-white)' : 'var(--color-muted)',
+          paddingLeft: `${depth * 14}px`,
+        }}
+      >
+        {depth > 0 ? '└ ' : ''}
+        {node.name}
+      </div>
+      {Array.isArray(node.children) &&
+        node.children.map((child) => renderNode(child, depth + 1))}
+    </div>
+  );
+
   return (
     <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 space-y-3">
-      {tree?.map((cat) => (
-        <div key={cat.id}>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-sm font-medium text-[var(--color-white)]">{cat.name}</span>
-          </div>
-          {cat.children.length > 0 && (
-            <div className="pl-4 space-y-1">
-              {cat.children.map((sub) => (
-                <div key={sub.id} className="text-xs text-[var(--color-muted)]">
-                  └ {sub.name}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
+      {tree?.map((cat) => renderNode(cat as CategoryTreeNode))}
     </div>
   );
 }
@@ -102,6 +115,29 @@ function RulesSettings() {
   const deleteRule = trpc.categories.deleteRule.useMutation({ onSuccess: () => refetch() });
   const addRule = trpc.categories.addRule.useMutation({ onSuccess: () => { refetch(); setPattern(''); } });
   const { data: cats } = trpc.categories.list.useQuery();
+  const categoryPathById = useMemo(
+    () => buildCategoryPathMap(cats ?? []),
+    [cats],
+  );
+  const leafCategoryIds = useMemo(
+    () => getLeafCategoryIds(cats ?? []),
+    [cats],
+  );
+  const selectableCategories = useMemo(
+    () =>
+      (cats ?? [])
+        .filter((category) => {
+          if (!leafCategoryIds.has(category.id)) return false;
+          const path = categoryPathById.get(category.id) ?? category.name;
+          return isActiveCategoryPath(path);
+        })
+        .sort((a, b) =>
+          (categoryPathById.get(a.id) ?? a.name).localeCompare(
+            categoryPathById.get(b.id) ?? b.name,
+          ),
+        ),
+    [cats, leafCategoryIds, categoryPathById],
+  );
 
   const [pattern, setPattern] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -126,8 +162,10 @@ function RulesSettings() {
             className="bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl px-4 py-2 text-sm text-[var(--color-white)] focus:outline-none"
           >
             <option value="">Category</option>
-            {cats?.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+            {selectableCategories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {categoryPathById.get(c.id) ?? c.name}
+              </option>
             ))}
           </select>
           <button
@@ -161,7 +199,9 @@ function RulesSettings() {
               {rules.map((r) => (
                 <tr key={r.id} className="border-b border-[var(--color-border)] last:border-0">
                   <td className="px-4 py-3 font-mono text-xs text-[var(--color-white)]">{r.pattern}</td>
-                  <td className="px-4 py-3 text-xs text-[var(--color-muted)]">{r.category?.name}</td>
+                  <td className="px-4 py-3 text-xs text-[var(--color-muted)]">
+                    {(r.categoryId ? categoryPathById.get(r.categoryId) : null) ?? r.category?.name}
+                  </td>
                   <td className="px-4 py-3 text-right">
                     <button
                       onClick={() => deleteRule.mutate({ id: r.id })}
