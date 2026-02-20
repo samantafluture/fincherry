@@ -12,7 +12,11 @@ export function UploadPage() {
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { data: accounts } = trpc.accounts.list.useQuery();
+  const {
+    data: accounts,
+    error: accountsError,
+    isLoading: accountsLoading,
+  } = trpc.accounts.list.useQuery();
   const { data: preview } = trpc.uploads.preview.useQuery(
     { uploadId: uploadId! },
     { enabled: !!uploadId },
@@ -123,15 +127,28 @@ export function UploadPage() {
             <select
               value={accountId}
               onChange={(e) => setAccountId(e.target.value)}
+              disabled={accountsLoading}
               className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl px-4 py-3 text-sm text-[var(--color-white)] focus:outline-none focus:ring-2 focus:ring-[var(--color-cherry-pink)]"
             >
-              <option value="">Select account</option>
+              <option value="">
+                {accountsLoading ? 'Loading accounts...' : 'Select account'}
+              </option>
               {accounts?.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name} ({a.currency})
                 </option>
               ))}
             </select>
+            {accountsError && (
+              <p className="text-xs text-[var(--color-coral)]">
+                Could not load accounts. Re-login and retry. If this persists, check API logs.
+              </p>
+            )}
+            {!accountsLoading && !accountsError && (accounts?.length ?? 0) === 0 && (
+              <p className="text-xs text-[var(--color-muted)]">
+                No accounts found. Run `pnpm db:seed` from repo root, then refresh.
+              </p>
+            )}
           </div>
 
           {error && (

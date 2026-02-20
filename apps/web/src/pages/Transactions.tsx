@@ -7,6 +7,8 @@ export function TransactionsPage() {
   const [page, setPage] = useState(1);
   const [accountId, setAccountId] = useState<string | undefined>();
 
+  const utils = trpc.useUtils();
+
   const { data: txData, isLoading } = trpc.transactions.list.useQuery({
     page,
     limit: 50,
@@ -17,6 +19,14 @@ export function TransactionsPage() {
   });
 
   const { data: accounts } = trpc.accounts.list.useQuery();
+  const { data: categories } = trpc.categories.list.useQuery();
+
+  const updateTx = trpc.transactions.update.useMutation({
+    onSuccess: () => {
+      utils.transactions.list.invalidate();
+      utils.analytics.invalidate();
+    },
+  });
 
   return (
     <div className="space-y-4">
@@ -79,9 +89,22 @@ export function TransactionsPage() {
                       {tx.description}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-surface-hover)] text-[var(--color-muted)]">
-                        {tx.category?.name ?? '—'}
-                      </span>
+                      <select
+                        value={tx.categoryId ?? ''}
+                        onChange={(e) => {
+                          const categoryId = e.target.value;
+                          if (!categoryId || categoryId === tx.categoryId) return;
+                          updateTx.mutate({ id: tx.id, categoryId });
+                        }}
+                        className="w-full min-w-40 bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-lg px-2 py-1 text-xs text-[var(--color-white)] focus:outline-none focus:ring-1 focus:ring-[var(--color-cherry-pink)]"
+                      >
+                        <option value="">{tx.category?.name ?? 'Uncategorized'}</option>
+                        {categories?.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                     <td className="px-4 py-3 text-[var(--color-muted)] text-xs whitespace-nowrap">
                       {tx.account?.name}

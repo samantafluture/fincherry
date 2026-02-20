@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: fincherry
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change-me-strong-password}
       POSTGRES_DB: fincherry
     ports:
       - "5432:5432"
@@ -26,10 +26,10 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: postgresql://fincherry:${DB_PASSWORD}@db:5432/fincherry
-      JWT_SECRET: ${JWT_SECRET}
-      AUTH_PASSPHRASE_HASH: ${AUTH_PASSPHRASE_HASH}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      DATABASE_URL: postgresql://fincherry:${DB_PASSWORD:-change-me-strong-password}@db:5432/fincherry
+      JWT_SECRET: ${JWT_SECRET:-}
+      AUTH_PASSPHRASE_HASH: ${AUTH_PASSPHRASE_HASH:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
       - uploads:/app/uploads
     depends_on:

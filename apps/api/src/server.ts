@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import { createRequire } from 'node:module';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
@@ -11,10 +12,20 @@ import { loadEnvFile } from './utils/loadEnv.js';
 loadEnvFile('../../.env');
 loadEnvFile();
 
+const require = createRequire(import.meta.url);
+const hasPinoPretty = (() => {
+  try {
+    require.resolve('pino-pretty');
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
 const app = Fastify({
   logger: {
     level: process.env.LOG_LEVEL ?? 'info',
-    ...(process.env.NODE_ENV !== 'production'
+    ...(process.env.NODE_ENV !== 'production' && hasPinoPretty
       ? { transport: { target: 'pino-pretty' } }
       : {}),
   },

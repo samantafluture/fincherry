@@ -51,7 +51,8 @@ DB_PASSWORD=change-me-strong-password
 DATABASE_URL=postgresql://fincherry:change-me-strong-password@localhost:5432/fincherry
 
 # Auth
-AUTH_PASSPHRASE_HASH=$2b$12$...
+# Quote this value to avoid Docker Compose `$` interpolation warnings
+AUTH_PASSPHRASE_HASH='$2b$12$...'
 JWT_SECRET=your-random-secret-min-32-chars
 
 # App
@@ -86,6 +87,10 @@ Confirm `db` is healthy and has a host port mapping like `0.0.0.0:5432->5432/tcp
 #### 4. Run database migrations and seed
 
 ```bash
+# One-command setup (recommended)
+pnpm db:setup
+
+# Or run steps manually:
 # Push the Drizzle schema to the database (creates all tables)
 pnpm --filter @fincherry/api db:push
 
@@ -148,7 +153,7 @@ Root `.env` (read by Docker Compose):
 cat > .env << 'EOF'
 DB_PASSWORD=change-me-strong-password
 JWT_SECRET=dev-secret-change-this-in-production-32chars
-AUTH_PASSPHRASE_HASH=$2b$12$...  # generate with bcryptjs (see Option A step 1)
+AUTH_PASSPHRASE_HASH='$2b$12$...'  # generate with bcryptjs (see Option A step 1)
 ANTHROPIC_API_KEY=sk-ant-...     # optional
 NODE_ENV=production
 PORT=3000
@@ -214,6 +219,8 @@ pnpm dev:api          # Fastify API with tsx watch (hot reload)
 pnpm dev:web          # Vite dev server (HMR)
 
 # Database
+pnpm db:up           # Start/recreate local PostgreSQL container
+pnpm db:setup        # db:up + db:push + db:seed
 pnpm --filter @fincherry/api db:push  # Push Drizzle schema to DB (dev — no migration files)
 pnpm db:generate      # Generate migration files (for production)
 pnpm db:migrate       # Run migrations

@@ -2,7 +2,14 @@ import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { router, protectedProcedure } from './trpc.js';
 import { db } from '../db/index.js';
-import { uploads, transactions, type Account } from '../db/schema.js';
+import {
+  uploads,
+  transactions,
+  categories,
+  goals,
+  goalSnapshots,
+  type Account,
+} from '../db/schema.js';
 import { parserRegistry } from '../parsers/registry.js';
 import { categorizerService } from '../services/categorizer.js';
 import { convertToCad } from '../services/currencyConverter.js';
@@ -10,6 +17,20 @@ import pdfParse from 'pdf-parse';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+
+const TS1_GOAL_NAME = 'Moving / House';
+const TS2_GOAL_NAME = 'Private Health Fund';
+const SAVINGS_TRANSFER_CATEGORY_NAME = 'Savings Transfer';
+
+function normalizeTransferTag(description: string): 'ts1' | 'ts2' | null {
+  if (/\bto\s+TS\s*1\b/i.test(description)) return 'ts1';
+  if (/\bto\s+TS\s*2\b/i.test(description)) return 'ts2';
+  return null;
+}
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
 
 export const uploadsRouter = router({
   list: protectedProcedure.query(async () => {
@@ -73,16 +94,27 @@ export const uploadsRouter = router({
         parsed.map((p) => p.description),
       );
 
+      const savingsTransferCategoryId =
+        (
+          await db.query.categories.findFirst({
+            where: eq(categories.name, SAVINGS_TRANSFER_CATEGORY_NAME),
+          })
+        )?.id ?? null;
+
       return parsed.map((tx, i) => {
         const descHash = crypto
           .createHash('md5')
           .update(tx.description.trim().toLowerCase())
           .digest('hex');
         const key = `${tx.date}|${tx.amount}|${descHash}`;
+        const transferTag = normalizeTransferTag(tx.description);
         return {
           ...tx,
           isDuplicate: existingKeys.has(key),
-          suggestedCategoryId: suggestions[i] ?? null,
+          suggestedCategoryId:
+            transferTag && savingsTransferCategoryId
+              ? savingsTransferCategoryId
+              : (suggestions[i] ?? null),
         };
       });
     }),
@@ -131,6 +163,54 @@ export const uploadsRouter = router({
         parsed.map((p) => p.description),
       );
 
+      const savingsTransferCategoryId =
+        (
+          await db.query.categories.findFirst({
+            where: eq(categories.name, SAVINGS_TRANSFER_CATEGORY_NAME),
+          })
+        )?.id ?? null;
+
+      const transferGoals = await db.query.goals.findMany({
+        where: (g, { or, eq }) =>
+          or(eq(g.name, TS1_GOAL_NAME), eq(g.name, TS2_GOAL_NAME)),
+        with: {
+          snapshots: {
+            orderBy: (s, { desc }) => [desc(s.snapshotDate)],
+            limit: 1,
+          },
+        },
+      });
+
+      const goalStateByTag = new Map<
+        'ts1' | 'ts2',
+        { id: string; name: string; targetAmount: number; currentAmount: number }
+      >();
+
+      for (const goal of transferGoals) {
+        const currentAmount = Number(goal.snapshots[0]?.currentAmount ?? 0);
+        const state = {
+          id: goal.id,
+          name: goal.name,
+          targetAmount: Number(goal.targetAmount),
+          currentAmount,
+        };
+        if (goal.name === TS1_GOAL_NAME) goalStateByTag.set('ts1', state);
+        if (goal.name === TS2_GOAL_NAME) goalStateByTag.set('ts2', state);
+      }
+
+      const existing = await db.query.transactions.findMany({
+        where: eq(transactions.accountId, account2.id),
+      });
+      const existingKeys = new Set(
+        existing.map(
+          (tx) =>
+            `${tx.date}|${tx.amount}|${crypto
+              .createHash('md5')
+              .update(tx.description.trim().toLowerCase())
+              .digest('hex')}`,
+        ),
+      );
+
       let imported = 0;
       let duplicates = 0;
 
@@ -141,26 +221,20 @@ export const uploadsRouter = router({
           .update(tx.description.trim().toLowerCase())
           .digest('hex');
 
-        // Duplicate check
-        const existing = await db.query.transactions.findMany({
-          where: eq(transactions.accountId, account2.id),
-        });
-        const isDuplicate = existing.some(
-          (e) =>
-            e.date === tx.date &&
-            e.amount === String(tx.amount) &&
-            crypto
-              .createHash('md5')
-              .update(e.description.trim().toLowerCase())
-              .digest('hex') === descHash,
-        );
+        const dedupeKey = `${tx.date}|${tx.amount}|${descHash}`;
+        const isDuplicate = existingKeys.has(dedupeKey);
 
         if (isDuplicate && input.skipDuplicates) {
           duplicates++;
           continue;
         }
 
-        const categoryId = overrideMap.get(i) ?? suggestions[i] ?? null;
+        const transferTag = normalizeTransferTag(tx.description);
+        const categoryId =
+          overrideMap.get(i) ??
+          (transferTag && savingsTransferCategoryId
+            ? savingsTransferCategoryId
+            : (suggestions[i] ?? null));
 
         // Convert to CAD
         const { amountCad, rate } = await convertToCad(
@@ -181,6 +255,22 @@ export const uploadsRouter = router({
           sourceFile: upload.filename,
           uploadId: upload.id,
         });
+
+        existingKeys.add(dedupeKey);
+
+        if (transferTag) {
+          const goalState = goalStateByTag.get(transferTag);
+          if (goalState) {
+            goalState.currentAmount = round2(goalState.currentAmount + Math.abs(tx.amount));
+            await db.insert(goalSnapshots).values({
+              goalId: goalState.id,
+              snapshotDate: tx.date,
+              currentAmount: String(goalState.currentAmount),
+              targetAmount: String(goalState.targetAmount),
+              notes: `Auto transfer mapping (${transferTag.toUpperCase()})`,
+            });
+          }
+        }
 
         imported++;
       }
