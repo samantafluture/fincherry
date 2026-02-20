@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { router, protectedProcedure } from './trpc.js';
 import { db } from '../db/index.js';
-import { accounts } from '../db/schema.js';
+import { accounts, transactions, goalSnapshots } from '../db/schema.js';
 
 const accountTypeEnum = z.enum(['checking', 'credit_card', 'savings']);
 const currencyEnum = z.enum(['CAD', 'BRL', 'EUR']);
@@ -24,9 +24,57 @@ const updateAccountSchema = createAccountSchema.partial().extend({
 
 export const accountsRouter = router({
   list: protectedProcedure.query(async () => {
-    return db.query.accounts.findMany({
+    const accountRows = await db.query.accounts.findMany({
       with: { goal: true },
       orderBy: (a, { asc }) => [asc(a.institution), asc(a.name)],
+    });
+
+    if (accountRows.length === 0) return accountRows;
+
+    const sums = await db
+      .select({
+        accountId: transactions.accountId,
+        balanceNative: sql<string>`coalesce(sum(${transactions.amount}), 0)`,
+        balanceCad: sql<string>`coalesce(sum(${transactions.amountCad}), 0)`,
+      })
+      .from(transactions)
+      .where(inArray(transactions.accountId, accountRows.map((account) => account.id)))
+      .groupBy(transactions.accountId);
+
+    const sumsByAccountId = new Map(sums.map((row) => [row.accountId, row]));
+    const goalIds = accountRows
+      .filter((account) => account.type === 'savings' && account.goalId)
+      .map((account) => account.goalId!)
+      .filter((goalId, idx, arr) => arr.indexOf(goalId) === idx);
+
+    const snapshots = goalIds.length
+      ? await db.query.goalSnapshots.findMany({
+          where: inArray(goalSnapshots.goalId, goalIds),
+          orderBy: (s, { asc, desc }) => [asc(s.goalId), desc(s.snapshotDate)],
+        })
+      : [];
+    const latestSnapshotByGoalId = new Map<string, (typeof snapshots)[number]>();
+    for (const snapshot of snapshots) {
+      if (!latestSnapshotByGoalId.has(snapshot.goalId)) {
+        latestSnapshotByGoalId.set(snapshot.goalId, snapshot);
+      }
+    }
+
+    return accountRows.map((account) => {
+      const sum = sumsByAccountId.get(account.id);
+      const latestGoalSnapshot =
+        account.type === 'savings' && account.goalId
+          ? latestSnapshotByGoalId.get(account.goalId)
+          : undefined;
+      const snapshotBalance = latestGoalSnapshot ? Number(latestGoalSnapshot.currentAmount) : null;
+      const currentBalanceNative = snapshotBalance ?? (sum ? Number(sum.balanceNative) : 0);
+      const currentBalanceCad = snapshotBalance ?? (sum ? Number(sum.balanceCad) : 0);
+
+      return {
+        ...account,
+        currentBalanceNative,
+        currentBalanceCad,
+      };
     });
   }),
 

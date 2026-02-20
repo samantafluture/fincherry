@@ -302,5 +302,5 @@ At login, enter the original plain passphrase you chose, not the hash string.
 | 2 — PDF Parsing | 🔜 Next | Bank parsers (needs real PDF samples), transaction table |
 | 3 — Multi-currency + Dashboard | 🔜 | Exchange rates live, charts wired to real data |
 | 4 — Goals + AI | 🔜 | Goal tracking UI, Claude insights, what-if scenarios |
-| 5 — Polish | 🔜 | Virtual scrolling, CSV export, recurring detection |
+| 5 — Polish | 🔜 | Virtual scrolling, CSV export, recurring detection, web bundle optimization (address Vite `chunk > 500 kB` warning via route/code splitting) |
 | VPS Deploy | ⏸ Deferred | Set up after Phase 2–3 work locally |

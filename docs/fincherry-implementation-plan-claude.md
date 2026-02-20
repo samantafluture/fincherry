@@ -602,6 +602,8 @@ jobs:
 
 **Phase 3 deliverable:** All three currencies work with automatic conversion. The dashboard shows your real financial data with interactive charts. Push to main runs CI checks automatically; CD to VPS is set up if VPS is live.
 
+> **Deferred polish note (from Phase 3 builds):** `pnpm --filter web build` currently reports a non-blocking Vite warning for a chunk above 500 kB after minification. Track this in Phase 5 performance polish using route-level lazy loading and/or `manualChunks`.
+
 ---
 
 ## Phase 4 — Goals & AI

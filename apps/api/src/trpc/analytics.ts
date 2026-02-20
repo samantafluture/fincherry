@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { and, gte, lte, eq, lt } from 'drizzle-orm';
+import { and, gte, lte, eq, lt, inArray } from 'drizzle-orm';
 import { router, protectedProcedure } from './trpc.js';
 import { db } from '../db/index.js';
 import { transactions, type Category } from '../db/schema.js';
@@ -10,7 +10,8 @@ const dateRangeSchema = z.object({
 });
 
 const analyticsFiltersSchema = dateRangeSchema.extend({
-  accountId: z.string().uuid().optional(),
+  accountIds: z.array(z.string().uuid()).default([]),
+  categoryIds: z.array(z.string().uuid()).default([]),
 });
 
 const TRANSFER_ROOT_NAME = 'Transfer';
@@ -29,7 +30,9 @@ type CategoryContext = {
   nameById: Map<string, string>;
   rootNameById: Map<string, string>;
   colorById: Map<string, string | null>;
+  childrenByParentId: Map<string, string[]>;
   isTransferCategory: (categoryId: string | null) => boolean;
+  expandCategoryFilterIds: (categoryIds: string[]) => string[];
 };
 
 function hashString(value: string): number {
@@ -52,7 +55,15 @@ async function loadCategoryContext(): Promise<CategoryContext> {
   const byId = new Map(all.map((category) => [category.id, category]));
   const nameById = new Map(all.map((category) => [category.id, category.name]));
   const colorById = new Map(all.map((category) => [category.id, category.color]));
+  const childrenByParentId = new Map<string, string[]>();
   const rootNameById = new Map<string, string>();
+
+  for (const category of all) {
+    if (!category.parentId) continue;
+    const children = childrenByParentId.get(category.parentId) ?? [];
+    children.push(category.id);
+    childrenByParentId.set(category.parentId, children);
+  }
 
   const getRootName = (id: string): string => {
     const cached = rootNameById.get(id);
@@ -78,15 +89,39 @@ async function loadCategoryContext(): Promise<CategoryContext> {
     nameById,
     rootNameById,
     colorById,
+    childrenByParentId,
     isTransferCategory: (categoryId: string | null) =>
       Boolean(categoryId && rootNameById.get(categoryId) === TRANSFER_ROOT_NAME),
+    expandCategoryFilterIds: (categoryIds: string[]) => {
+      if (categoryIds.length === 0) return [];
+
+      const expanded = new Set<string>();
+      const stack = [...categoryIds];
+
+      while (stack.length > 0) {
+        const id = stack.pop()!;
+        if (expanded.has(id)) continue;
+        expanded.add(id);
+        const children = childrenByParentId.get(id) ?? [];
+        for (const childId of children) stack.push(childId);
+      }
+
+      return Array.from(expanded);
+    },
   };
 }
 
 export const analyticsRouter = router({
-  summary: protectedProcedure.input(dateRangeSchema).query(async ({ input }) => {
-    const { startDate, endDate } = input;
+  summary: protectedProcedure.input(analyticsFiltersSchema).query(async ({ input }) => {
+    const { startDate, endDate, accountIds, categoryIds } = input;
     const categoryContext = await loadCategoryContext();
+    const expandedCategoryIds = categoryContext.expandCategoryFilterIds(categoryIds);
+
+    const conditions = [gte(transactions.date, startDate), lte(transactions.date, endDate)];
+    if (accountIds.length > 0) conditions.push(inArray(transactions.accountId, accountIds));
+    if (expandedCategoryIds.length > 0) {
+      conditions.push(inArray(transactions.categoryId, expandedCategoryIds));
+    }
 
     const rows = await db
       .select({
@@ -94,7 +129,7 @@ export const analyticsRouter = router({
         categoryId: transactions.categoryId,
       })
       .from(transactions)
-      .where(and(gte(transactions.date, startDate), lte(transactions.date, endDate)));
+      .where(and(...conditions));
 
     let income = 0;
     let expenses = 0;
@@ -122,7 +157,16 @@ export const analyticsRouter = router({
         categoryId: transactions.categoryId,
       })
       .from(transactions)
-      .where(and(gte(transactions.date, prevStart), lte(transactions.date, prevEnd)));
+      .where(
+        and(
+          gte(transactions.date, prevStart),
+          lte(transactions.date, prevEnd),
+          ...(accountIds.length > 0 ? [inArray(transactions.accountId, accountIds)] : []),
+          ...(expandedCategoryIds.length > 0
+            ? [inArray(transactions.categoryId, expandedCategoryIds)]
+            : []),
+        ),
+      );
 
     let prevIncome = 0;
     let prevExpenses = 0;
@@ -147,22 +191,26 @@ export const analyticsRouter = router({
   }),
 
   byCategory: protectedProcedure.input(analyticsFiltersSchema).query(async ({ input }) => {
-    const { startDate, endDate, accountId } = input;
+    const { startDate, endDate, accountIds, categoryIds } = input;
     const categoryContext = await loadCategoryContext();
+    const expandedCategoryIds = categoryContext.expandCategoryFilterIds(categoryIds);
 
     const conditions = [
       gte(transactions.date, startDate),
       lte(transactions.date, endDate),
       lt(transactions.amountCad, '0'), // expenses only
     ];
-    if (accountId) conditions.push(eq(transactions.accountId, accountId));
+    if (accountIds.length > 0) conditions.push(inArray(transactions.accountId, accountIds));
+    if (expandedCategoryIds.length > 0) {
+      conditions.push(inArray(transactions.categoryId, expandedCategoryIds));
+    }
 
     const rows = await db.query.transactions.findMany({
       where: and(...conditions),
       with: { category: true },
     });
 
-    const byCategory: Record<string, { name: string; color: string | null; amount: number }> = {};
+    const byCategory: Record<string, { categoryId: string | null; name: string; color: string | null; amount: number }> = {};
     let total = 0;
 
     for (const tx of rows) {
@@ -178,10 +226,16 @@ export const analyticsRouter = router({
       const amount = Math.abs(Number(tx.amountCad));
       total += amount;
 
-      if (!byCategory[catName]) {
-        byCategory[catName] = { name: catName, color: catColor, amount: 0 };
+      const key = tx.categoryId ?? '__uncategorized__';
+      if (!byCategory[key]) {
+        byCategory[key] = {
+          categoryId: tx.categoryId,
+          name: catName,
+          color: catColor,
+          amount: 0,
+        };
       }
-      byCategory[catName]!.amount += amount;
+      byCategory[key]!.amount += amount;
     }
 
     return Object.values(byCategory)
@@ -193,19 +247,25 @@ export const analyticsRouter = router({
       .sort((a, b) => b.amount - a.amount);
   }),
 
-  incomeVsExpense: protectedProcedure.input(dateRangeSchema).query(async ({ input }) => {
+  incomeVsExpense: protectedProcedure.input(analyticsFiltersSchema).query(async ({ input }) => {
     const categoryContext = await loadCategoryContext();
+    const expandedCategoryIds = categoryContext.expandCategoryFilterIds(input.categoryIds);
+    const conditions = [gte(transactions.date, input.startDate), lte(transactions.date, input.endDate)];
+    if (input.accountIds.length > 0) conditions.push(inArray(transactions.accountId, input.accountIds));
+    if (expandedCategoryIds.length > 0) {
+      conditions.push(inArray(transactions.categoryId, expandedCategoryIds));
+    }
 
     // Return monthly buckets between startDate and endDate
     const rows = await db.query.transactions.findMany({
-      where: and(
-        gte(transactions.date, input.startDate),
-        lte(transactions.date, input.endDate),
-      ),
+      where: and(...conditions),
       columns: { date: true, amountCad: true, categoryId: true },
     });
 
-    const months: Record<string, { month: string; income: number; expenses: number }> = {};
+    const months: Record<
+      string,
+      { month: string; monthKey: string; income: number; expenses: number }
+    > = {};
 
     for (const tx of rows) {
       if (categoryContext.isTransferCategory(tx.categoryId)) continue;
@@ -216,7 +276,7 @@ export const analyticsRouter = router({
       });
 
       if (!months[monthKey]) {
-        months[monthKey] = { month: label, income: 0, expenses: 0 };
+        months[monthKey] = { month: label, monthKey, income: 0, expenses: 0 };
       }
 
       const v = Number(tx.amountCad);
@@ -236,14 +296,21 @@ export const analyticsRouter = router({
 
   trends: protectedProcedure.input(analyticsFiltersSchema).query(async ({ input }) => {
     const categoryContext = await loadCategoryContext();
+    const expandedCategoryIds = categoryContext.expandCategoryFilterIds(input.categoryIds);
+
+    const conditions = [
+      gte(transactions.date, input.startDate),
+      lte(transactions.date, input.endDate),
+      lt(transactions.amountCad, '0'),
+    ];
+    if (input.accountIds.length > 0) conditions.push(inArray(transactions.accountId, input.accountIds));
+    if (expandedCategoryIds.length > 0) {
+      conditions.push(inArray(transactions.categoryId, expandedCategoryIds));
+    }
 
     // Top 5 categories by spend and their monthly trend
     const rows = await db.query.transactions.findMany({
-      where: and(
-        gte(transactions.date, input.startDate),
-        lte(transactions.date, input.endDate),
-        lt(transactions.amountCad, '0'),
-      ),
+      where: and(...conditions),
       with: { category: true },
     });
 

@@ -1,25 +1,72 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { trpc } from '@/lib/trpc';
 import { formatCAD, currencySymbol } from '@/lib/formatCurrency';
 import {
   buildCategoryPathMap,
-  getLeafCategoryIds,
-  isActiveCategoryPath,
+  buildGroupedCategoryOptions,
 } from '@/lib/categoryPaths';
-
-type CategorySelectGroup = {
-  label: string;
-  options: Array<{ id: string; label: string }>;
-};
 
 function formatPathForDisplay(path: string): string {
   return path.replace(/ > /g, ' / ');
 }
 
 export function TransactionsPage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [accountId, setAccountId] = useState<string | undefined>();
+  const [accountId, setAccountId] = useState<string | undefined>(
+    searchParams.get('accountId') ?? undefined,
+  );
+  const [accountIds, setAccountIds] = useState<string[]>(
+    (searchParams.get('accountIds') ?? '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean),
+  );
+  const [activeCategoryId, setActiveCategoryId] = useState<string | undefined>(
+    searchParams.get('categoryId') ?? undefined,
+  );
+  const [activeCategoryIds, setActiveCategoryIds] = useState<string[]>(
+    (searchParams.get('categoryIds') ?? '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean),
+  );
+  const [startDate, setStartDate] = useState<string | undefined>(
+    searchParams.get('startDate') ?? undefined,
+  );
+  const [endDate, setEndDate] = useState<string | undefined>(
+    searchParams.get('endDate') ?? undefined,
+  );
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
+  const [accountSearch, setAccountSearch] = useState('');
+  const [categorySearch, setCategorySearch] = useState('');
+  const accountMenuRef = useRef<HTMLDivElement | null>(null);
+  const categoryMenuRef = useRef<HTMLDivElement | null>(null);
+  const searchParamsKey = searchParams.toString();
+
+  useEffect(() => {
+    setAccountId(searchParams.get('accountId') ?? undefined);
+    setAccountIds(
+      (searchParams.get('accountIds') ?? '')
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean),
+    );
+    setActiveCategoryId(searchParams.get('categoryId') ?? undefined);
+    setActiveCategoryIds(
+      (searchParams.get('categoryIds') ?? '')
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean),
+    );
+    setStartDate(searchParams.get('startDate') ?? undefined);
+    setEndDate(searchParams.get('endDate') ?? undefined);
+    setPage(1);
+  }, [searchParamsKey]);
 
   const utils = trpc.useUtils();
 
@@ -28,6 +75,11 @@ export function TransactionsPage() {
     limit: 50,
     search: search || undefined,
     accountId,
+    accountIds,
+    categoryId: activeCategoryId,
+    categoryIds: activeCategoryIds,
+    startDate,
+    endDate,
     sortBy: 'date',
     sortOrder: 'desc',
   });
@@ -38,48 +90,93 @@ export function TransactionsPage() {
     () => buildCategoryPathMap(categories ?? []),
     [categories],
   );
-  const leafCategoryIds = useMemo(
-    () => getLeafCategoryIds(categories ?? []),
-    [categories],
+  const groupedCategoryOptions = useMemo(
+    () => buildGroupedCategoryOptions(categories ?? [], categoryPathById, { leafOnly: false }),
+    [categories, categoryPathById],
   );
-  const selectableCategories = useMemo(
-    () =>
-      (categories ?? [])
-        .filter((category) => {
-          if (!leafCategoryIds.has(category.id)) return false;
-          const path = categoryPathById.get(category.id) ?? category.name;
-          return isActiveCategoryPath(path);
-        })
-        .sort((a, b) =>
-          (categoryPathById.get(a.id) ?? a.name).localeCompare(
-            categoryPathById.get(b.id) ?? b.name,
-          ),
-        ),
-    [categories, leafCategoryIds, categoryPathById],
-  );
-  const groupedCategoryOptions = useMemo((): CategorySelectGroup[] => {
-    const groups = new Map<string, CategorySelectGroup>();
-
-    for (const category of selectableCategories) {
-      const path = categoryPathById.get(category.id) ?? category.name;
-      const segments = path.split(' > ');
-      const leafLabel = segments[segments.length - 1] ?? category.name;
-      const groupLabel = segments.slice(0, -1).join(' / ') || 'Other';
-
-      if (!groups.has(groupLabel)) {
-        groups.set(groupLabel, { label: groupLabel, options: [] });
-      }
-
-      groups.get(groupLabel)!.options.push({ id: category.id, label: leafLabel });
-    }
-
-    return Array.from(groups.values())
+  const filteredAccounts = useMemo(() => {
+    if (!accounts) return [];
+    const q = accountSearch.trim().toLowerCase();
+    if (!q) return accounts;
+    return accounts.filter(
+      (account) =>
+        account.name.toLowerCase().includes(q) ||
+        account.institution.toLowerCase().includes(q),
+    );
+  }, [accounts, accountSearch]);
+  const filteredCategoryGroups = useMemo(() => {
+    const q = categorySearch.trim().toLowerCase();
+    if (!q) return groupedCategoryOptions;
+    return groupedCategoryOptions
       .map((group) => ({
         ...group,
-        options: group.options.sort((a, b) => a.label.localeCompare(b.label)),
+        options: group.options.filter(
+          (option) =>
+            option.label.toLowerCase().includes(q) ||
+            option.path.toLowerCase().includes(q) ||
+            group.label.toLowerCase().includes(q),
+        ),
       }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [selectableCategories, categoryPathById]);
+      .filter((group) => group.options.length > 0);
+  }, [groupedCategoryOptions, categorySearch]);
+  const accountFilterLabel = useMemo(() => {
+    if (!accounts) return 'All accounts';
+    if (accountIds.length > 0) return `${accountIds.length} selected`;
+    if (accountId) {
+      const one = accounts.find((account) => account.id === accountId);
+      return one?.name ?? '1 selected';
+    }
+    return 'All accounts';
+  }, [accounts, accountId, accountIds]);
+  const categoryFilterLabel = useMemo(() => {
+    if (activeCategoryIds.length > 0) return `${activeCategoryIds.length} selected`;
+    if (activeCategoryId) {
+      const path = categoryPathById.get(activeCategoryId);
+      return path ? path.replace(/ > /g, ' / ') : '1 selected';
+    }
+    return 'All categories';
+  }, [activeCategoryId, activeCategoryIds, categoryPathById]);
+  const accountNameById = useMemo(() => {
+    return new Map((accounts ?? []).map((account) => [account.id, account.name]));
+  }, [accounts]);
+  const selectedAccountFilterIds = useMemo(() => {
+    const unique = new Set<string>();
+    if (accountId) unique.add(accountId);
+    for (const id of accountIds) unique.add(id);
+    return Array.from(unique);
+  }, [accountId, accountIds]);
+  const selectedCategoryFilterIds = useMemo(() => {
+    const unique = new Set<string>();
+    if (activeCategoryId) unique.add(activeCategoryId);
+    for (const id of activeCategoryIds) unique.add(id);
+    return Array.from(unique);
+  }, [activeCategoryId, activeCategoryIds]);
+  const hasActiveSelectionPills =
+    selectedAccountFilterIds.length > 0 || selectedCategoryFilterIds.length > 0;
+
+  useEffect(() => {
+    if (!isAccountMenuOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (accountMenuRef.current?.contains(target)) return;
+      setIsAccountMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [isAccountMenuOpen]);
+
+  useEffect(() => {
+    if (!isCategoryMenuOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (categoryMenuRef.current?.contains(target)) return;
+      setIsCategoryMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [isCategoryMenuOpen]);
 
   const updateTx = trpc.transactions.update.useMutation({
     onSuccess: () => {
@@ -92,6 +189,37 @@ export function TransactionsPage() {
     <div className="space-y-4">
       <h1 className="text-xl font-semibold text-[var(--color-white)]">Transactions</h1>
 
+      {(activeCategoryId || activeCategoryIds.length > 0 || startDate || endDate) && (
+        <div className="flex items-center justify-between gap-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl px-3 py-2">
+          <div className="text-xs text-[var(--color-muted)]">
+            Drill-down active
+            {accountIds.length > 0 && ` · Accounts: ${accountIds.length} selected`}
+            {activeCategoryIds.length > 0 &&
+              ` · Categories: ${activeCategoryIds.length} selected`}
+            {activeCategoryId &&
+              ` · Category: ${(
+                categoryPathById.get(activeCategoryId) ?? 'Unknown'
+              ).replace(/ > /g, ' / ')}`}
+            {startDate && endDate && ` · Period: ${startDate} to ${endDate}`}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveCategoryId(undefined);
+              setActiveCategoryIds([]);
+              setAccountIds([]);
+              setStartDate(undefined);
+              setEndDate(undefined);
+              setPage(1);
+              navigate('/transactions');
+            }}
+            className="text-xs text-[var(--color-soft-blue)] hover:text-[var(--color-white)] transition-colors"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex gap-2 flex-wrap">
         <input
@@ -101,17 +229,193 @@ export function TransactionsPage() {
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           className="flex-1 min-w-48 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl px-4 py-2 text-sm text-[var(--color-white)] placeholder:text-[var(--color-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-cherry-pink)]"
         />
-        <select
-          value={accountId ?? ''}
-          onChange={(e) => { setAccountId(e.target.value || undefined); setPage(1); }}
-          className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl px-4 py-2 text-sm text-[var(--color-white)] focus:outline-none focus:ring-2 focus:ring-[var(--color-cherry-pink)]"
-        >
-          <option value="">All accounts</option>
-          {accounts?.map((a) => (
-            <option key={a.id} value={a.id}>{a.name}</option>
-          ))}
-        </select>
+        <div ref={accountMenuRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setIsAccountMenuOpen((prev) => !prev)}
+            className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl px-4 py-2 text-sm text-[var(--color-white)] min-w-[170px] text-left"
+          >
+            Accounts: {accountFilterLabel}
+          </button>
+          {isAccountMenuOpen && (
+            <div className="absolute z-20 mt-2 w-72 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-xl p-3 space-y-2">
+              <input
+                type="search"
+                value={accountSearch}
+                onChange={(e) => setAccountSearch(e.target.value)}
+                placeholder="Search account..."
+                className="w-full bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-white)] placeholder:text-[var(--color-muted)] focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setAccountId(undefined);
+                  setAccountIds([]);
+                  setPage(1);
+                }}
+                className="w-full text-left px-2 py-1.5 rounded-md text-xs border bg-[var(--color-surface-hover)] text-[var(--color-muted)] border-[var(--color-border)] hover:text-[var(--color-white)]"
+              >
+                Clear all account selections
+              </button>
+              <div className="max-h-56 overflow-y-auto space-y-1 pr-1">
+                {filteredAccounts.map((account) => {
+                  const active = accountIds.includes(account.id) || accountId === account.id;
+                  return (
+                    <label
+                      key={account.id}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[var(--color-surface-hover)] cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={active}
+                        onChange={() => {
+                          setPage(1);
+                          setAccountId(undefined);
+                          setAccountIds((prev) =>
+                            prev.includes(account.id)
+                              ? prev.filter((id) => id !== account.id)
+                              : [...prev, account.id],
+                          );
+                        }}
+                        className="accent-[var(--color-cherry-pink)]"
+                      />
+                      <span className="text-xs text-[var(--color-white)]">{account.name}</span>
+                    </label>
+                  );
+                })}
+                {filteredAccounts.length === 0 && (
+                  <div className="px-2 py-2 text-xs text-[var(--color-muted)]">
+                    No accounts match this search.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+        <div ref={categoryMenuRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setIsCategoryMenuOpen((prev) => !prev)}
+            className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl px-4 py-2 text-sm text-[var(--color-white)] min-w-[190px] text-left"
+          >
+            Categories: {categoryFilterLabel}
+          </button>
+          {isCategoryMenuOpen && (
+            <div className="absolute right-0 z-20 mt-2 w-80 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-xl p-3 space-y-2">
+              <input
+                type="search"
+                value={categorySearch}
+                onChange={(e) => setCategorySearch(e.target.value)}
+                placeholder="Search category..."
+                className="w-full bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-white)] placeholder:text-[var(--color-muted)] focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveCategoryId(undefined);
+                  setActiveCategoryIds([]);
+                  setPage(1);
+                }}
+                className="w-full text-left px-2 py-1.5 rounded-md text-xs border bg-[var(--color-surface-hover)] text-[var(--color-muted)] border-[var(--color-border)] hover:text-[var(--color-white)]"
+              >
+                Clear all category selections
+              </button>
+              <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+                {filteredCategoryGroups.map((group) => (
+                  <div key={group.label} className="space-y-1">
+                    <div className="px-1 text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
+                      {group.label}
+                    </div>
+                    {group.options.map((option) => {
+                      const active =
+                        activeCategoryIds.includes(option.id) || activeCategoryId === option.id;
+                      return (
+                        <label
+                          key={option.id}
+                          className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[var(--color-surface-hover)] cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={active}
+                            onChange={() => {
+                              setPage(1);
+                              setActiveCategoryId(undefined);
+                              setActiveCategoryIds((prev) =>
+                                prev.includes(option.id)
+                                  ? prev.filter((id) => id !== option.id)
+                                  : [...prev, option.id],
+                              );
+                            }}
+                            className="accent-[var(--color-cherry-pink)]"
+                          />
+                          <span className="text-xs text-[var(--color-white)]">{option.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ))}
+                {filteredCategoryGroups.length === 0 && (
+                  <div className="px-2 py-2 text-xs text-[var(--color-muted)]">
+                    No categories match this search.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
+      {hasActiveSelectionPills && (
+        <div className="flex items-center justify-between gap-2 flex-wrap bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl px-3 py-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {selectedAccountFilterIds.map((id) => (
+              <button
+                key={`acc-${id}`}
+                type="button"
+                onClick={() => {
+                  setPage(1);
+                  if (accountId === id) setAccountId(undefined);
+                  setAccountIds((prev) => prev.filter((v) => v !== id));
+                }}
+                className="inline-flex items-center gap-1 rounded-lg bg-[var(--color-surface-hover)] border border-[var(--color-border)] px-2 py-1 text-[11px] text-[var(--color-white)]"
+              >
+                <span>Account: {accountNameById.get(id) ?? 'Unknown'}</span>
+                <span className="text-[var(--color-muted)]">×</span>
+              </button>
+            ))}
+            {selectedCategoryFilterIds.map((id) => (
+              <button
+                key={`cat-${id}`}
+                type="button"
+                onClick={() => {
+                  setPage(1);
+                  if (activeCategoryId === id) setActiveCategoryId(undefined);
+                  setActiveCategoryIds((prev) => prev.filter((v) => v !== id));
+                }}
+                className="inline-flex items-center gap-1 rounded-lg bg-[var(--color-surface-hover)] border border-[var(--color-border)] px-2 py-1 text-[11px] text-[var(--color-white)]"
+              >
+                <span>
+                  Category:{' '}
+                  {(categoryPathById.get(id) ?? 'Unknown').replace(/ > /g, ' / ')}
+                </span>
+                <span className="text-[var(--color-muted)]">×</span>
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setPage(1);
+              setAccountId(undefined);
+              setAccountIds([]);
+              setActiveCategoryId(undefined);
+              setActiveCategoryIds([]);
+            }}
+            className="text-xs text-[var(--color-soft-blue)] hover:text-[var(--color-white)] transition-colors"
+          >
+            Clear all selections
+          </button>
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl overflow-hidden">

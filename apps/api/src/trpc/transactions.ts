@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { eq, and, gte, lte, like, sql, desc, asc } from 'drizzle-orm';
+import { eq, and, gte, lte, like, sql, desc, asc, inArray } from 'drizzle-orm';
 import { router, protectedProcedure } from './trpc.js';
 import { db } from '../db/index.js';
 import { transactions } from '../db/schema.js';
@@ -10,7 +10,9 @@ const transactionFiltersSchema = z.object({
   startDate: z.string().optional(),
   endDate: z.string().optional(),
   accountId: z.string().uuid().optional(),
+  accountIds: z.array(z.string().uuid()).default([]),
   categoryId: z.string().uuid().optional(),
+  categoryIds: z.array(z.string().uuid()).default([]),
   minAmount: z.number().optional(),
   maxAmount: z.number().optional(),
   search: z.string().optional(),
@@ -38,14 +40,57 @@ const updateTransactionSchema = createTransactionSchema.partial().extend({
   id: z.string().uuid(),
 });
 
+async function expandCategoryFilterIds(categoryIds: string[]): Promise<string[]> {
+  if (categoryIds.length === 0) return [];
+
+  const allCategories = await db.query.categories.findMany({
+    columns: { id: true, parentId: true },
+  });
+  const childrenByParentId = new Map<string, string[]>();
+  for (const category of allCategories) {
+    if (!category.parentId) continue;
+    const children = childrenByParentId.get(category.parentId) ?? [];
+    children.push(category.id);
+    childrenByParentId.set(category.parentId, children);
+  }
+
+  const expanded = new Set<string>();
+  const stack = [...categoryIds];
+
+  while (stack.length > 0) {
+    const id = stack.pop()!;
+    if (expanded.has(id)) continue;
+    expanded.add(id);
+    const children = childrenByParentId.get(id) ?? [];
+    for (const childId of children) {
+      stack.push(childId);
+    }
+  }
+
+  return Array.from(expanded);
+}
+
 export const transactionsRouter = router({
   list: protectedProcedure.input(transactionFiltersSchema).query(async ({ input }) => {
     const conditions = [];
 
     if (input.startDate) conditions.push(gte(transactions.date, input.startDate));
     if (input.endDate) conditions.push(lte(transactions.date, input.endDate));
-    if (input.accountId) conditions.push(eq(transactions.accountId, input.accountId));
-    if (input.categoryId) conditions.push(eq(transactions.categoryId, input.categoryId));
+    if (input.accountIds.length > 0) {
+      conditions.push(inArray(transactions.accountId, input.accountIds));
+    } else if (input.accountId) {
+      conditions.push(eq(transactions.accountId, input.accountId));
+    }
+
+    const requestedCategoryIds = [
+      ...(input.categoryId ? [input.categoryId] : []),
+      ...input.categoryIds,
+    ];
+    const expandedCategoryIds = await expandCategoryFilterIds(requestedCategoryIds);
+    if (expandedCategoryIds.length > 0) {
+      conditions.push(inArray(transactions.categoryId, expandedCategoryIds));
+    }
+
     if (input.currency) conditions.push(eq(transactions.currency, input.currency));
     if (input.recurring !== undefined)
       conditions.push(eq(transactions.isRecurring, input.recurring));

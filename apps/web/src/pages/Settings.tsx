@@ -3,8 +3,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import {
   buildCategoryPathMap,
-  getLeafCategoryIds,
-  isActiveCategoryPath,
+  buildGroupedCategoryOptions,
 } from '@/lib/categoryPaths';
 
 type CategoryTreeNode = {
@@ -53,7 +52,7 @@ function AccountsSettings() {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-[var(--color-border)]">
-            {['Name', 'Type', 'Institution', 'Currency', ''].map((h) => (
+            {['Name', 'Type', 'Institution', 'Currency', 'Balance (CAD)', 'Balance (Native)', ''].map((h) => (
               <th key={h} className="text-left px-4 py-3 text-[11px] font-medium tracking-wider uppercase text-[var(--color-muted)]">
                 {h}
               </th>
@@ -67,6 +66,12 @@ function AccountsSettings() {
               <td className="px-4 py-3 text-[var(--color-muted)] text-xs capitalize">{a.type.replace('_', ' ')}</td>
               <td className="px-4 py-3 text-[var(--color-muted)] text-xs">{a.institution}</td>
               <td className="px-4 py-3 text-[var(--color-muted)] text-xs font-mono">{a.currency}</td>
+              <td className="px-4 py-3 text-[var(--color-white)] text-xs font-mono">
+                {((a as { currentBalanceCad?: number }).currentBalanceCad ?? 0).toFixed(2)}
+              </td>
+              <td className="px-4 py-3 text-[var(--color-muted)] text-xs font-mono">
+                {((a as { currentBalanceNative?: number }).currentBalanceNative ?? 0).toFixed(2)}
+              </td>
               <td className="px-4 py-3 text-right">
                 <button
                   onClick={() => deleteAccount.mutate({ id: a.id })}
@@ -119,24 +124,9 @@ function RulesSettings() {
     () => buildCategoryPathMap(cats ?? []),
     [cats],
   );
-  const leafCategoryIds = useMemo(
-    () => getLeafCategoryIds(cats ?? []),
-    [cats],
-  );
-  const selectableCategories = useMemo(
-    () =>
-      (cats ?? [])
-        .filter((category) => {
-          if (!leafCategoryIds.has(category.id)) return false;
-          const path = categoryPathById.get(category.id) ?? category.name;
-          return isActiveCategoryPath(path);
-        })
-        .sort((a, b) =>
-          (categoryPathById.get(a.id) ?? a.name).localeCompare(
-            categoryPathById.get(b.id) ?? b.name,
-          ),
-        ),
-    [cats, leafCategoryIds, categoryPathById],
+  const groupedCategoryOptions = useMemo(
+    () => buildGroupedCategoryOptions(cats ?? [], categoryPathById, { leafOnly: false }),
+    [cats, categoryPathById],
   );
 
   const [pattern, setPattern] = useState('');
@@ -162,10 +152,14 @@ function RulesSettings() {
             className="bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl px-4 py-2 text-sm text-[var(--color-white)] focus:outline-none"
           >
             <option value="">Category</option>
-            {selectableCategories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {categoryPathById.get(c.id) ?? c.name}
-              </option>
+            {groupedCategoryOptions.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.options.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
           <button
