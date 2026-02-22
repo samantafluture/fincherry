@@ -239,6 +239,7 @@ pnpm db:up           # Start/recreate local PostgreSQL container
 pnpm db:setup        # db:up + db:push + db:seed
 pnpm db:backup       # Create timestamped PostgreSQL dump in ./backups
 pnpm db:restore -- backups/<file>.dump [target_db] [--replace-target]  # Restore dump into a DB
+pnpm db:restore:verify -- [backups/<file>.dump] [target_db] [--keep-db] # Run restore verification checklist
 pnpm db:backup:cron  # Install daily backup cron job for current user (3 AM default)
 pnpm --filter @fincherry/api db:push  # Push Drizzle schema to DB (dev — no migration files)
 pnpm db:generate      # Generate migration files (for production)
@@ -317,12 +318,25 @@ Remove cron entry:
 pnpm db:backup:cron -- --remove
 ```
 
-Manual verification (recommended once):
+Automated verification (recommended once per environment):
 
-1. Create a backup with `pnpm db:backup`.
-2. Restore to test DB with `pnpm db:restore -- backups/<file>.dump fincherry_restore_test --replace-target`.
-3. Check tables in restored DB:
-   `docker compose exec -T db psql -U fincherry -d fincherry_restore_test -c "\dt"`.
+```bash
+pnpm db:restore:verify
+```
+
+This command creates a fresh backup, restores it into `fincherry_restore_verify`, runs a pass/fail checklist (required tables + round-trip row-count comparison), then drops the verification DB on success.
+
+To verify an existing dump file:
+
+```bash
+pnpm db:restore:verify -- backups/<file>.dump
+```
+
+To keep the verification DB for manual inspection:
+
+```bash
+pnpm db:restore:verify -- backups/<file>.dump fincherry_restore_verify --keep-db
+```
 
 ---
 
@@ -392,6 +406,7 @@ At login, enter the original plain passphrase you chose, not the hash string.
 - ✅ Done: Transactions page now supports CSV export using the current active filters (account/category/date/search), suitable for tax/manual analysis.
 - ✅ Done: Settings now has recurring-transaction detection (weekly/biweekly/monthly/quarterly pattern scan) and can auto-flag matched transactions.
 - ✅ Done: Backup/restore workflow is scripted (`pnpm db:backup`, `pnpm db:restore`) with optional cron installer (`pnpm db:backup:cron`).
+- ✅ Done: Restore verification is automated (`pnpm db:restore:verify`) with pass/fail checklist output and optional keep-db inspection mode.
 - ✅ Done: Budget vs actual tracking is available in Settings and summarized on Dashboard for selected periods.
 - ✅ Done: Transactions performance improved with debounced search, adjustable page size, and virtualized row windowing for large pages.
 - ✅ Done: Monthly Reports now support PDF export from the AI page (print-ready export flow).
