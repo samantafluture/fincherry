@@ -241,12 +241,18 @@ export const aiRouter = router({
     .input(
       z.object({
         categoryId: z.string().uuid(),
-        reductionPercent: z.number().min(1).max(100),
+        changeType: z.enum(['decrease', 'increase']).default('decrease'),
+        changePercent: z.number().min(1).max(100).optional(),
+        reductionPercent: z.number().min(1).max(100).optional(),
         startDate: z.string(),
         endDate: z.string(),
+      }).refine((value) => value.changePercent !== undefined || value.reductionPercent !== undefined, {
+        message: 'changePercent is required',
+        path: ['changePercent'],
       }),
     )
     .mutation(async ({ input }) => {
+      const percent = input.changePercent ?? input.reductionPercent ?? 0;
       const selectedCategory = await db.query.categories.findFirst({
         where: (c, { eq }) => eq(c.id, input.categoryId),
       });
@@ -271,12 +277,15 @@ export const aiRouter = router({
       }, 0);
       const periodMonths = Math.max(monthsBetween(input.startDate, input.endDate), 1 / 30);
       const currentMonthlySpend = totalInPeriod / periodMonths;
-      const monthlySavings = currentMonthlySpend * (input.reductionPercent / 100);
+      const direction = input.changeType === 'decrease' ? 1 : -1;
+      const monthlySavings = currentMonthlySpend * (percent / 100) * direction;
 
       return {
         categoryId: selectedCategory.id,
         categoryName: selectedCategory.name,
-        reductionPercent: input.reductionPercent,
+        changeType: input.changeType,
+        changePercent: percent,
+        reductionPercent: percent,
         currentMonthlySpend: Math.round(currentMonthlySpend * 100) / 100,
         monthlySavings: Math.round(monthlySavings * 100) / 100,
         yearlySavings: Math.round(monthlySavings * 12 * 100) / 100,

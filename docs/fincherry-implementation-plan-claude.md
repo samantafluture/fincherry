@@ -5,6 +5,23 @@
 
 ---
 
+## Current Status Update (Feb 2026)
+
+- ✅ Phase 1 complete locally.
+- ✅ Phase 2 complete (Desjardins upload/parse/import/categorization workflow).
+- ✅ Phase 3 complete (multi-currency + dashboard + parser expansion + transaction CRUD).
+- ✅ Phase 4 complete with Gemini:
+  - goals/projections fixed to use authoritative snapshots,
+  - insights with date ranges + regenerate,
+  - Ask AI (free prompt) with optional period comparison,
+  - what-if scenarios with decrease/increase,
+  - monthly report generation/history.
+- 🟡 Phase 5 is the active phase now (polish + hardening).
+
+Implementation note: runtime AI provider is `Gemini` via `GEMINI_API_KEY` (not Anthropic).
+
+---
+
 ## Revised Approach — Local First, Deploy Later
 
 > **Decision (Feb 2026):** VPS setup, DNS, SSL, and auto-deploy tasks are deferred until the app is functional and tested locally. Phases 1.1–1.3 (VPS hardening, Docker on VPS, DNS + SSL) are skipped for now. The deploy portion of Phase 3.7 will be revisited once the core app works end-to-end on localhost.
@@ -49,7 +66,7 @@ Throughout the implementation, a coding agent (Claude Code, Gemini CLI, Codex) c
 | **Phase 3** | Validate exchange rate conversions look correct | Spot-check BRL/EUR → CAD amounts |
 | **Phase 3** | Review dashboard layout on your actual phone | Agent can't test on your device |
 | **Phase 4** | Confirm goal targets and deadlines are accurate | Financial decisions are yours |
-| **Phase 4** | Set `ANTHROPIC_API_KEY` env variable on VPS | API key management — only you |
+| **Phase 4** | Set `GEMINI_API_KEY` env variable on VPS/local env | API key management — only you |
 | **Phase 4** | Review AI insights for quality/relevance | Judge if the AI output is actually useful |
 | **Phase 5** | Test backup restore procedure once | Verify you can actually recover data |
 
@@ -607,6 +624,8 @@ jobs:
 ---
 
 ## Phase 4 — Goals & AI
+
+> **Phase 4 completion update (Feb 2026):** Implemented with Gemini in `apps/api/src/services/aiProvider.ts` and `apps/api/src/trpc/ai.ts`. Includes insights, ask, comparison, prediction, decrease/increase what-if, and monthly reports. The older Anthropic/Claude snippets below are historical design notes only.
 
 The goal is: savings goals are tracked with projections, and AI gives you actionable insights.
 

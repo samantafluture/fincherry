@@ -8,9 +8,18 @@
 
 ---
 
+## Status Update (Feb 2026)
+
+- Phases 1–4 are implemented in the current codebase.
+- Active phase is Phase 5 (polish/hardening).
+- Runtime AI provider is Gemini (`GEMINI_API_KEY`) with local fallback and response caching.
+- Historical references to "Claude" below reflect original planning language.
+
+---
+
 ## 1. Overview
 
-FinCherry is a self-hosted, mobile-friendly personal finance web app for tracking income, expenses, investments, and savings goals across multiple currencies (CAD, BRL, EUR). It ingests bank and credit card statements via PDF upload, normalizes transactions into a single CAD-denominated view, and provides AI-powered insights through the Claude API with anonymized data.
+FinCherry is a self-hosted, mobile-friendly personal finance web app for tracking income, expenses, investments, and savings goals across multiple currencies (CAD, BRL, EUR). It ingests bank and credit card statements via PDF upload, normalizes transactions into a single CAD-denominated view, and provides AI-powered insights through the Gemini API with anonymized data.
 
 ### 1.1 Goals
 
@@ -18,7 +27,7 @@ FinCherry is a self-hosted, mobile-friendly personal finance web app for trackin
 - **Visual spending intelligence** — charts and graphs showing where money goes, trends over time, and income vs. expense breakdowns.
 - **Transaction management** — categorize, search, and filter transactions across all accounts.
 - **Savings goal tracking** — monitor progress toward specific financial targets tied to savings accounts.
-- **AI-powered insights** — spending analysis, suggestions, predictions, and "what-if" scenarios via Claude API with stripped PII.
+- **AI-powered insights** — spending analysis, suggestions, predictions, and "what-if" scenarios via Gemini API with stripped PII.
 
 ### 1.2 Non-Goals (for v1)
 

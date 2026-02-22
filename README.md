@@ -16,7 +16,7 @@ Tracks income, expenses, and savings goals across CAD, BRL, and EUR accounts. In
 | API | Fastify 5 + tRPC v11 |
 | Database | PostgreSQL 16 + Drizzle ORM |
 | Auth | Passphrase → bcrypt → JWT (httpOnly cookie) |
-| AI | Gemini API (`gemini-2.0-flash` by default; configurable via env) |
+| AI | Gemini API (`gemini-2.5-flash` by default; configurable via env) |
 | Monorepo | pnpm workspaces |
 
 ---
@@ -304,15 +304,16 @@ At login, enter the original plain passphrase you chose, not the hash string.
 |-------|--------|-------|
 | 1 — Foundation | ✅ Done locally | Monorepo, schema, tRPC, React shell, auth |
 | 2 — PDF Parsing | ✅ Done (Desjardins flow) | Upload + preview + confirm, duplicate detection, category rules, transaction review/edit workflow |
-| 3 — Multi-currency + Dashboard | 🟡 In progress | Exchange-rate conversion + dashboard analytics/filters shipped, transaction CRUD (manual add/edit/delete) added; remaining non-Desjardins parsers are optional before Phase 4 |
-| 4 — Goals + AI | 🔜 | Goal tracking UI, Gemini insights, what-if scenarios |
-| 5 — Polish | 🔜 | Virtual scrolling, CSV export, recurring detection, ongoing web bundle optimization |
+| 3 — Multi-currency + Dashboard | ✅ Done | Exchange-rate conversion + dashboard analytics/filters, account/category multi-selects, parser coverage for Desjardins + Itaú + N26 + Scotia historical, transaction CRUD |
+| 4 — Goals + AI | ✅ Done | Goal projections with authoritative snapshots, Gemini insights, Ask AI with period comparison, what-if scenarios (decrease/increase), monthly report generation/history |
+| 5 — Polish | 🟡 In progress | Hardening, loading/error UX, backup/restore workflow, performance and bundle follow-up |
 | VPS Deploy | ⏸ Deferred | Set up after Phase 2–3 work locally |
 
-### Phase 2/3 Manual Input Status (before Phase 4)
+### Phase 4 Completion Notes (before Phase 5)
 
-- ✅ Done: Desjardins checking + credit card statements provided and validated in-app.
-- ✅ Done: Initial manual categorization and rule creation completed.
-- ✅ Done: Dashboard UX review feedback applied (desktop/mobile behavior validated during iteration).
-- Optional if you want full original Phase 3 scope now: provide real PDFs for N26, Itaú Checking, Itaú Visa Credit Card, and (optionally) ScotiaBank Amex parsers.
-- Optional if you want BRL/EUR sign-off now: spot-check converted CAD totals against your BRL/EUR statements.
+- ✅ Done: Local Gemini integration with robust fallback handling and parse repair.
+- ✅ Done: Insights panel supports date presets/custom ranges + regenerate.
+- ✅ Done: Ask AI supports free-form questions and optional comparison periods.
+- ✅ Done: Monthly AI reports can be generated and listed in history.
+- ✅ Done: What-if scenario supports both `Decrease` and `Increase`.
+- ⚠️ Required after pulling latest changes: run `pnpm db:push` (adds `ai_reports` table), then restart API.

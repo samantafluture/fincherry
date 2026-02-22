@@ -47,6 +47,7 @@ export function AIPage() {
   const [categoryId, setCategoryId] = useState('');
   const [goalId, setGoalId] = useState('');
   const [reduction, setReduction] = useState(20);
+  const [scenarioMode, setScenarioMode] = useState<'decrease' | 'increase'>('decrease');
   const [rangePreset, setRangePreset] = useState<RangePreset>('3 months');
   const initialRange = useMemo(() => getDateRange('3 months'), []);
   const [customStartDate, setCustomStartDate] = useState(initialRange.startDate);
@@ -444,7 +445,15 @@ export function AIPage() {
             ))}
           </select>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-[var(--color-muted)]">reduce by</span>
+            <select
+              value={scenarioMode}
+              onChange={(e) => setScenarioMode(e.target.value as 'decrease' | 'increase')}
+              className="bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl px-2.5 py-2 text-sm text-[var(--color-white)] focus:outline-none"
+            >
+              <option value="decrease">Decrease</option>
+              <option value="increase">Increase</option>
+            </select>
+            <span className="text-sm text-[var(--color-muted)]">by</span>
             <input
               type="number"
               value={reduction}
@@ -459,7 +468,8 @@ export function AIPage() {
             onClick={() =>
               scenario.mutate({
                 categoryId,
-                reductionPercent: reduction,
+                changeType: scenarioMode,
+                changePercent: reduction,
                 startDate: activeRange.startDate,
                 endDate: activeRange.endDate,
               })
@@ -471,23 +481,33 @@ export function AIPage() {
           </button>
         </div>
 
-        {scenario.data && (
+            {scenario.data && (
           <div className="bg-[var(--color-surface-hover)] rounded-xl p-4">
+            {(() => {
+              const isDecrease = scenario.data.changeType !== 'increase';
+              const monthlyAbs = Math.abs(scenario.data.monthlySavings);
+              const yearlyAbs = Math.abs(scenario.data.yearlySavings);
+              const primaryLabel = isDecrease ? 'saved / month' : 'extra / month';
+              const secondaryLabel = isDecrease ? 'saved / year' : 'extra / year';
+              const primaryColor = isDecrease ? '#2DD4A0' : '#F97352';
+              const secondaryColor = isDecrease ? '#F472B6' : '#F9A352';
+              return (
+                <>
             <div className="grid grid-cols-3 gap-3 text-center mb-3">
               {[
                 {
-                  value: formatCAD(scenario.data.monthlySavings),
-                  label: 'saved / month',
-                  color: '#2DD4A0',
+                  value: formatCAD(monthlyAbs),
+                  label: primaryLabel,
+                  color: primaryColor,
                 },
                 {
-                  value: formatCAD(scenario.data.yearlySavings),
-                  label: 'saved / year',
-                  color: '#F472B6',
+                  value: formatCAD(yearlyAbs),
+                  label: secondaryLabel,
+                  color: secondaryColor,
                 },
                 {
-                  value: `${scenario.data.reductionPercent}%`,
-                  label: 'reduction',
+                  value: `${scenario.data.changePercent}%`,
+                  label: isDecrease ? 'decrease' : 'increase',
                   color: '#8B9EE0',
                 },
               ].map((m) => (
@@ -501,9 +521,14 @@ export function AIPage() {
             </div>
             <p className="text-xs text-[var(--color-muted)] leading-relaxed">
               Current spend in <strong className="text-[var(--color-white)]">{scenario.data.categoryName}</strong>:{' '}
-              {formatCAD(scenario.data.currentMonthlySpend)}/mo. Reducing by {scenario.data.reductionPercent}% would save{' '}
-              {formatCAD(scenario.data.monthlySavings)}/mo.
+              {formatCAD(scenario.data.currentMonthlySpend)}/mo.{' '}
+              {isDecrease
+                ? `Decreasing by ${scenario.data.changePercent}% would save ${formatCAD(monthlyAbs)}/mo.`
+                : `Increasing by ${scenario.data.changePercent}% would add ${formatCAD(monthlyAbs)}/mo.`}
             </p>
+                </>
+              );
+            })()}
           </div>
         )}
       </div>
