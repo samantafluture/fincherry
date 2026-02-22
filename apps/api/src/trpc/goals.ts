@@ -12,6 +12,32 @@ const createGoalSchema = z.object({
   deadline: z.string().optional(), // ISO date YYYY-MM-DD
 });
 
+type SnapshotSource = 'transfer' | 'statement' | 'manual';
+
+function getSnapshotSource(notes: string | null): SnapshotSource {
+  if (notes?.startsWith('Auto transfer mapping')) return 'transfer';
+  if (notes?.startsWith('Auto from Desjardins savings table')) return 'statement';
+  return 'manual';
+}
+
+function snapshotPriority(source: SnapshotSource): number {
+  if (source === 'manual') return 3;
+  if (source === 'statement') return 2;
+  return 1;
+}
+
+function toNumber(value: string | number | null | undefined): number {
+  return Number(value ?? 0);
+}
+
+function monthsBetween(startIsoDate: string, endIsoDate: string): number {
+  const start = new Date(`${startIsoDate}T00:00:00Z`);
+  const end = new Date(`${endIsoDate}T00:00:00Z`);
+  const ms = end.getTime() - start.getTime();
+  if (ms <= 0) return 0;
+  return ms / (1000 * 60 * 60 * 24 * 30.4375);
+}
+
 export const goalsRouter = router({
   list: protectedProcedure.query(async () => {
     const allGoals = await db.query.goals.findMany({
@@ -75,19 +101,61 @@ export const goalsRouter = router({
 
       if (!goal) throw new Error('Goal not found');
 
-      const latest = goal.snapshots[goal.snapshots.length - 1];
-      const current = Number(latest?.currentAmount ?? 0);
+      const canonicalByDate = new Map<
+        string,
+        {
+          id: string;
+          snapshotDate: string;
+          currentAmount: number;
+          targetAmount: number;
+          notes: string | null;
+          source: SnapshotSource;
+        }
+      >();
+
+      for (const snapshot of goal.snapshots) {
+        const source = getSnapshotSource(snapshot.notes);
+        const normalized = {
+          id: snapshot.id,
+          snapshotDate: snapshot.snapshotDate,
+          currentAmount: toNumber(snapshot.currentAmount),
+          targetAmount: toNumber(snapshot.targetAmount),
+          notes: snapshot.notes,
+          source,
+        };
+
+        const existing = canonicalByDate.get(snapshot.snapshotDate);
+        if (!existing || snapshotPriority(source) >= snapshotPriority(existing.source)) {
+          canonicalByDate.set(snapshot.snapshotDate, normalized);
+        }
+      }
+
+      const snapshots = Array.from(canonicalByDate.values()).sort((a, b) =>
+        a.snapshotDate.localeCompare(b.snapshotDate),
+      );
+
+      const latest = snapshots[snapshots.length - 1];
+      const current = toNumber(latest?.currentAmount);
       const target = Number(goal.targetAmount);
       const pct = target > 0 ? Math.round((current / target) * 100) : 0;
 
-      // Rolling 3-month average contribution
-      const recent = goal.snapshots.slice(-3);
-      const avgMonthlyContrib =
-        recent.length >= 2
-          ? (Number(recent[recent.length - 1]!.currentAmount) -
-              Number(recent[0]!.currentAmount)) /
-            (recent.length - 1)
-          : 0;
+      const authoritative = snapshots.filter((s) => s.source !== 'transfer');
+      const projectionSeries =
+        authoritative.length >= 2 ? authoritative.slice(-3) : snapshots.slice(-3);
+      const projectionStart = projectionSeries[0];
+      const projectionEnd = projectionSeries[projectionSeries.length - 1];
+
+      let avgMonthlyContrib = 0;
+      if (projectionStart && projectionEnd && projectionSeries.length >= 2) {
+        const contributionDelta = projectionEnd.currentAmount - projectionStart.currentAmount;
+        const spanMonths = monthsBetween(
+          projectionStart.snapshotDate,
+          projectionEnd.snapshotDate,
+        );
+        if (spanMonths > 0) {
+          avgMonthlyContrib = contributionDelta / spanMonths;
+        }
+      }
 
       // Projected completion date
       let projectedDate: string | null = null;
@@ -101,6 +169,7 @@ export const goalsRouter = router({
       return {
         ...goal,
         currentAmount: current,
+        snapshots,
         percentage: pct,
         avgMonthlyContribution: Math.round(avgMonthlyContrib),
         projectedCompletionDate: projectedDate,
