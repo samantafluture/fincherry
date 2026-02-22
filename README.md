@@ -299,8 +299,16 @@ At login, enter the original plain passphrase you chose, not the hash string.
 | Phase | Status | Focus |
 |-------|--------|-------|
 | 1 — Foundation | ✅ Done locally | Monorepo, schema, tRPC, React shell, auth |
-| 2 — PDF Parsing | 🔜 Next | Bank parsers (needs real PDF samples), transaction table |
-| 3 — Multi-currency + Dashboard | 🔜 | Exchange rates live, charts wired to real data |
+| 2 — PDF Parsing | ✅ Done (Desjardins flow) | Upload + preview + confirm, duplicate detection, category rules, transaction review/edit workflow |
+| 3 — Multi-currency + Dashboard | 🟡 In progress | Exchange-rate conversion + dashboard analytics/filters shipped, transaction CRUD (manual add/edit/delete) added; remaining non-Desjardins parsers are optional before Phase 4 |
 | 4 — Goals + AI | 🔜 | Goal tracking UI, Claude insights, what-if scenarios |
 | 5 — Polish | 🔜 | Virtual scrolling, CSV export, recurring detection, ongoing web bundle optimization |
 | VPS Deploy | ⏸ Deferred | Set up after Phase 2–3 work locally |
+
+### Phase 2/3 Manual Input Status (before Phase 4)
+
+- ✅ Done: Desjardins checking + credit card statements provided and validated in-app.
+- ✅ Done: Initial manual categorization and rule creation completed.
+- ✅ Done: Dashboard UX review feedback applied (desktop/mobile behavior validated during iteration).
+- Optional if you want full original Phase 3 scope now: provide real PDFs for N26, Itaú Checking, Itaú Visa Credit Card, and (optionally) ScotiaBank Amex parsers.
+- Optional if you want BRL/EUR sign-off now: spot-check converted CAD totals against your BRL/EUR statements.

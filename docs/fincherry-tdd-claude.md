@@ -46,8 +46,8 @@ FinCherry is a self-hosted, mobile-friendly personal finance web app for trackin
 | Desjardins Savings (Health) | Savings | Desjardins | CAD | CA | `desjardins-savings` |
 | Desjardins Savings (House) | Savings | Desjardins | CAD | CA | `desjardins-savings` |
 | N26 | Checking + card | N26 | EUR | EU | `n26` |
-| Nubank | Checking + card | Nubank | BRL | BR | `nubank` |
-| Itaú Visa | Credit card | Itaú | BRL | BR | `itau-cc` |
+| Itaú Checking | Checking | Itaú | BRL | BR | `itau-checking` |
+| Itaú Visa | Credit card | Itaú | BRL | BR | `itau-credit_card` |
 
 **Note:** Credit card PDFs often have a different format than bank account PDFs from the same institution. Desjardins checking and Desjardins Mastercard will likely need separate parser classes (different regex patterns), even though they're the same bank. The savings accounts may appear on the same statement as checking or have their own — the parser handles both cases.
 
@@ -223,9 +223,9 @@ Inspired by the [Deserve fintech branding](https://abduzeedo.com/crafting-fintec
 -- Accounts (bank accounts, credit cards, savings)
 CREATE TABLE accounts (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name            VARCHAR(100) NOT NULL,        -- "Nubank Credit Card"
+    name            VARCHAR(100) NOT NULL,        -- "Itaú Visa Credit Card"
     type            VARCHAR(20) NOT NULL,          -- 'checking', 'credit_card', 'savings'
-    institution     VARCHAR(100) NOT NULL,         -- "Nubank", "N26", "Desjardins"
+    institution     VARCHAR(100) NOT NULL,         -- "Itaú", "N26", "Desjardins"
     currency        VARCHAR(3) NOT NULL,           -- 'CAD', 'BRL', 'EUR'
     country         VARCHAR(2) NOT NULL,           -- 'CA', 'BR', 'EU'
     is_investment   BOOLEAN DEFAULT FALSE,
@@ -403,7 +403,7 @@ interface StatementParser {
 
 // Registry pattern — add new parsers as you onboard new banks
 const parsers: Map<string, StatementParser> = new Map();
-parsers.set('nubank', new NubankParser());
+parsers.set('itau-checking', new ItauCheckingParser());
 parsers.set('n26', new N26Parser());
 parsers.set('desjardins', new DesjardinsParser());
 ```

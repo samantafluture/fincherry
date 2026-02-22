@@ -3,6 +3,7 @@ import { eq, and, gte, lte, like, sql, desc, asc, inArray } from 'drizzle-orm';
 import { router, protectedProcedure } from './trpc.js';
 import { db } from '../db/index.js';
 import { transactions } from '../db/schema.js';
+import { convertToCad } from '../services/currencyConverter.js';
 
 const transactionFiltersSchema = z.object({
   page: z.number().int().min(1).default(1),
@@ -28,7 +29,7 @@ const createTransactionSchema = z.object({
   description: z.string().min(1),
   amount: z.number(),
   currency: z.enum(['CAD', 'BRL', 'EUR']),
-  amountCad: z.number(),
+  amountCad: z.number().optional(),
   exchangeRate: z.number().optional(),
   categoryId: z.string().uuid().optional(),
   subcategoryId: z.string().uuid().optional(),
@@ -141,13 +142,21 @@ export const transactionsRouter = router({
   create: protectedProcedure
     .input(createTransactionSchema)
     .mutation(async ({ input }) => {
+      const conversion =
+        input.amountCad !== undefined
+          ? { amountCad: input.amountCad, rate: input.exchangeRate }
+          : await convertToCad(input.amount, input.currency, input.date);
+
       const [tx] = await db
         .insert(transactions)
         .values({
           ...input,
           amount: String(input.amount),
-          amountCad: String(input.amountCad),
-          exchangeRate: input.exchangeRate ? String(input.exchangeRate) : null,
+          amountCad: String(conversion.amountCad),
+          exchangeRate:
+            conversion.rate !== undefined && conversion.rate !== null
+              ? String(conversion.rate)
+              : null,
         })
         .returning();
       return tx!;
@@ -158,7 +167,29 @@ export const transactionsRouter = router({
     const updateData: Record<string, unknown> = { ...data, updatedAt: new Date() };
     if (data.amount !== undefined) updateData.amount = String(data.amount);
     if (data.amountCad !== undefined) updateData.amountCad = String(data.amountCad);
-    if (data.exchangeRate !== undefined) updateData.exchangeRate = String(data.exchangeRate);
+    if (data.exchangeRate !== undefined)
+      updateData.exchangeRate = String(data.exchangeRate);
+
+    const needsConversion =
+      data.amountCad === undefined &&
+      (data.amount !== undefined || data.currency !== undefined || data.date !== undefined);
+
+    if (needsConversion) {
+      const existing = await db.query.transactions.findFirst({
+        where: eq(transactions.id, id),
+      });
+      if (!existing) throw new Error('Transaction not found');
+
+      const amount = data.amount ?? Number(existing.amount);
+      const currency = (data.currency ?? existing.currency) as 'CAD' | 'BRL' | 'EUR';
+      const date = data.date ?? existing.date;
+      const conversion = await convertToCad(amount, currency, date);
+      updateData.amountCad = String(conversion.amountCad);
+      updateData.exchangeRate =
+        conversion.rate !== undefined && conversion.rate !== null
+          ? String(conversion.rate)
+          : null;
+    }
 
     const [tx] = await db
       .update(transactions)

@@ -166,18 +166,20 @@ const ACCOUNT_SEEDS = [
     country: 'EU' as const,
   },
   {
-    name: 'Nubank',
+    name: 'Itaú Checking',
     type: 'checking' as const,
-    institution: 'Nubank',
+    institution: 'Itaú',
     currency: 'BRL' as const,
     country: 'BR' as const,
+    legacyNames: ['Nubank'],
   },
   {
-    name: 'Itaú Visa',
+    name: 'Itaú Visa Credit Card',
     type: 'credit_card' as const,
     institution: 'Itaú',
     currency: 'BRL' as const,
     country: 'BR' as const,
+    legacyNames: ['Itaú Visa'],
   },
   {
     name: 'ScotiaBank Amex (historical)',
@@ -302,9 +304,21 @@ async function ensureAccounts(goalIdByName: Map<string, string>): Promise<void> 
   for (const seed of ACCOUNT_SEEDS) {
     const desiredGoalId = seed.goalName ? (goalIdByName.get(seed.goalName) ?? null) : null;
 
-    const existing = await db.query.accounts.findFirst({
+    let existing = await db.query.accounts.findFirst({
       where: (a, { eq }) => eq(a.name, seed.name),
     });
+
+    if (!existing && seed.legacyNames && seed.legacyNames.length > 0) {
+      for (const legacyName of seed.legacyNames) {
+        const legacy = await db.query.accounts.findFirst({
+          where: (a, { eq }) => eq(a.name, legacyName),
+        });
+        if (legacy) {
+          existing = legacy;
+          break;
+        }
+      }
+    }
 
     if (!existing) {
       await db.insert(accounts).values({
@@ -321,6 +335,7 @@ async function ensureAccounts(goalIdByName: Map<string, string>): Promise<void> 
     await db
       .update(accounts)
       .set({
+        name: seed.name,
         type: seed.type,
         institution: seed.institution,
         currency: seed.currency,

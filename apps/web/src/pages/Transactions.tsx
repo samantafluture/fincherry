@@ -11,6 +11,18 @@ function formatPathForDisplay(path: string): string {
   return path.replace(/ > /g, ' / ');
 }
 
+type Currency = 'CAD' | 'BRL' | 'EUR';
+
+type TxDraft = {
+  id?: string;
+  date: string;
+  description: string;
+  amount: string;
+  currency: Currency;
+  accountId: string;
+  categoryId: string;
+};
+
 export function TransactionsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -44,6 +56,9 @@ export function TransactionsPage() {
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
   const [accountSearch, setAccountSearch] = useState('');
   const [categorySearch, setCategorySearch] = useState('');
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [draft, setDraft] = useState<TxDraft | null>(null);
+  const [draftError, setDraftError] = useState<string | null>(null);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const categoryMenuRef = useRef<HTMLDivElement | null>(null);
   const searchParamsKey = searchParams.toString();
@@ -182,8 +197,101 @@ export function TransactionsPage() {
     onSuccess: () => {
       utils.transactions.list.invalidate();
       utils.analytics.invalidate();
+      utils.accounts.list.invalidate();
+      utils.goals.list.invalidate();
     },
   });
+  const createTx = trpc.transactions.create.useMutation({
+    onSuccess: () => {
+      utils.transactions.list.invalidate();
+      utils.analytics.invalidate();
+      utils.accounts.list.invalidate();
+      utils.goals.list.invalidate();
+    },
+  });
+  const deleteTx = trpc.transactions.delete.useMutation({
+    onSuccess: () => {
+      utils.transactions.list.invalidate();
+      utils.analytics.invalidate();
+      utils.accounts.list.invalidate();
+      utils.goals.list.invalidate();
+    },
+  });
+
+  const savingDraft = createTx.isPending || updateTx.isPending;
+  const deletingTx = deleteTx.isPending;
+  const defaultAccount = accounts?.[0];
+
+  const openCreateDialog = () => {
+    if (!defaultAccount) return;
+    setDraft({
+      date: new Date().toISOString().slice(0, 10),
+      description: '',
+      amount: '',
+      currency: defaultAccount.currency as Currency,
+      accountId: defaultAccount.id,
+      categoryId: '',
+    });
+    setDraftError(null);
+    setIsEditorOpen(true);
+  };
+
+  const openEditDialog = (tx: {
+    id: string;
+    date: string;
+    description: string;
+    amount: string;
+    currency: string;
+    accountId: string;
+    categoryId: string | null;
+  }) => {
+    setDraft({
+      id: tx.id,
+      date: tx.date,
+      description: tx.description,
+      amount: String(Number(tx.amount)),
+      currency: tx.currency as Currency,
+      accountId: tx.accountId,
+      categoryId: tx.categoryId ?? '',
+    });
+    setDraftError(null);
+    setIsEditorOpen(true);
+  };
+
+  const submitDraft = () => {
+    if (!draft) return;
+    const amount = Number(draft.amount);
+    if (!draft.date || !draft.description.trim() || !draft.accountId) {
+      setDraftError('Date, description, and account are required.');
+      return;
+    }
+    if (!Number.isFinite(amount) || amount === 0) {
+      setDraftError('Amount must be a valid non-zero number.');
+      return;
+    }
+
+    const payload = {
+      date: draft.date,
+      description: draft.description.trim(),
+      amount,
+      currency: draft.currency,
+      accountId: draft.accountId,
+      categoryId: draft.categoryId || undefined,
+    };
+
+    const onSuccess = () => {
+      setIsEditorOpen(false);
+      setDraft(null);
+      setDraftError(null);
+    };
+
+    if (draft.id) {
+      updateTx.mutate({ id: draft.id, ...payload }, { onSuccess });
+      return;
+    }
+
+    createTx.mutate(payload, { onSuccess });
+  };
 
   return (
     <div className="space-y-4">
@@ -363,6 +471,14 @@ export function TransactionsPage() {
             </div>
           )}
         </div>
+        <button
+          type="button"
+          onClick={openCreateDialog}
+          disabled={!defaultAccount}
+          className="bg-[var(--color-cherry-pink)] text-[var(--color-deep-blue)] rounded-xl px-4 py-2 text-sm font-medium disabled:opacity-50"
+        >
+          Add transaction
+        </button>
       </div>
       {hasActiveSelectionPills && (
         <div className="flex items-center justify-between gap-2 flex-wrap bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl px-3 py-2">
@@ -429,18 +545,21 @@ export function TransactionsPage() {
           <div>
             <table className="w-full text-sm table-fixed">
               <colgroup>
-                <col className="w-[11%]" />
-                <col className="w-[38%]" />
-                <col className="w-[24%]" />
-                <col className="w-[17%]" />
                 <col className="w-[10%]" />
+                <col className="w-[34%]" />
+                <col className="w-[21%]" />
+                <col className="w-[15%]" />
+                <col className="w-[12%]" />
+                <col className="w-[8%]" />
               </colgroup>
               <thead>
                 <tr className="border-b border-[var(--color-border)]">
-                  {['Date', 'Description', 'Category', 'Account', 'Amount'].map((h) => (
+                  {['Date', 'Description', 'Category', 'Account', 'Amount', 'Actions'].map((h) => (
                     <th
                       key={h}
-                      className="text-left px-4 py-3 text-[11px] font-medium tracking-wider uppercase text-[var(--color-muted)]"
+                      className={`px-4 py-3 text-[11px] font-medium tracking-wider uppercase text-[var(--color-muted)] ${
+                        h === 'Amount' ? 'text-right' : 'text-left'
+                      }`}
                     >
                       {h}
                     </th>
@@ -512,6 +631,41 @@ export function TransactionsPage() {
                           </div>
                         )}
                       </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-1.5 justify-end">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openEditDialog({
+                                id: tx.id,
+                                date: tx.date,
+                                description: tx.description,
+                                amount: tx.amount,
+                                currency: tx.currency,
+                                accountId: tx.accountId,
+                                categoryId: tx.categoryId ?? null,
+                              })
+                            }
+                            className="px-2 py-1 rounded-md text-[11px] bg-[var(--color-surface-hover)] text-[var(--color-soft-blue)] hover:text-[var(--color-white)]"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            disabled={deletingTx}
+                            onClick={() => {
+                              const ok = window.confirm(
+                                'Delete this transaction? This cannot be undone.',
+                              );
+                              if (!ok) return;
+                              deleteTx.mutate({ id: tx.id });
+                            }}
+                            className="px-2 py-1 rounded-md text-[11px] bg-[var(--color-surface-hover)] text-[var(--color-coral)] hover:text-[var(--color-white)] disabled:opacity-50"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -545,6 +699,169 @@ export function TransactionsPage() {
           </div>
         )}
       </div>
+
+      {isEditorOpen && draft && (
+        <div className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-[var(--color-white)]">
+                {draft.id ? 'Edit transaction' : 'Manual transaction'}
+              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditorOpen(false);
+                  setDraft(null);
+                  setDraftError(null);
+                }}
+                className="text-xs text-[var(--color-muted)] hover:text-[var(--color-white)]"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="space-y-1">
+                <span className="text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+                  Date
+                </span>
+                <input
+                  type="date"
+                  value={draft.date}
+                  onChange={(e) => setDraft((prev) => (prev ? { ...prev, date: e.target.value } : prev))}
+                  className="w-full bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-white)] focus:outline-none"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+                  Account
+                </span>
+                <select
+                  value={draft.accountId}
+                  onChange={(e) => {
+                    const nextAccountId = e.target.value;
+                    const account = accounts?.find((a) => a.id === nextAccountId);
+                    setDraft((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            accountId: nextAccountId,
+                            currency: (account?.currency ?? prev.currency) as Currency,
+                          }
+                        : prev,
+                    );
+                  }}
+                  className="w-full bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-white)] focus:outline-none"
+                >
+                  {(accounts ?? []).map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name} ({account.currency})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+                  Description
+                </span>
+                <input
+                  type="text"
+                  value={draft.description}
+                  onChange={(e) =>
+                    setDraft((prev) =>
+                      prev ? { ...prev, description: e.target.value } : prev,
+                    )
+                  }
+                  placeholder="Transaction description"
+                  className="w-full bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-white)] placeholder:text-[var(--color-muted)] focus:outline-none"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+                  Amount
+                </span>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={draft.amount}
+                  onChange={(e) =>
+                    setDraft((prev) => (prev ? { ...prev, amount: e.target.value } : prev))
+                  }
+                  placeholder="-34.90 for expense, +1200 for income"
+                  className="w-full bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-white)] placeholder:text-[var(--color-muted)] focus:outline-none"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+                  Currency
+                </span>
+                <select
+                  value={draft.currency}
+                  onChange={(e) =>
+                    setDraft((prev) =>
+                      prev ? { ...prev, currency: e.target.value as Currency } : prev,
+                    )
+                  }
+                  className="w-full bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-white)] focus:outline-none"
+                >
+                  <option value="CAD">CAD</option>
+                  <option value="BRL">BRL</option>
+                  <option value="EUR">EUR</option>
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+                  Category
+                </span>
+                <select
+                  value={draft.categoryId}
+                  onChange={(e) =>
+                    setDraft((prev) =>
+                      prev ? { ...prev, categoryId: e.target.value } : prev,
+                    )
+                  }
+                  className="w-full bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-white)] focus:outline-none"
+                >
+                  <option value="">Uncategorized</option>
+                  {groupedCategoryOptions.map((group) => (
+                    <optgroup key={group.label} label={group.label}>
+                      {group.options.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {draftError && <p className="text-xs text-[var(--color-coral)]">{draftError}</p>}
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditorOpen(false);
+                  setDraft(null);
+                  setDraftError(null);
+                }}
+                className="px-3 py-2 rounded-lg text-sm bg-[var(--color-surface-hover)] text-[var(--color-muted)] hover:text-[var(--color-white)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={savingDraft}
+                onClick={submitDraft}
+                className="px-3 py-2 rounded-lg text-sm bg-[var(--color-cherry-pink)] text-[var(--color-deep-blue)] disabled:opacity-60"
+              >
+                {savingDraft ? 'Saving...' : draft.id ? 'Save changes' : 'Create transaction'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

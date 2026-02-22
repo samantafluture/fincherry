@@ -45,7 +45,7 @@ Throughout the implementation, a coding agent (Claude Code, Gemini CLI, Codex) c
 | **Phase 2** | Provide 1 real PDF per Desjardins account type | Agent can't access your bank accounts |
 | **Phase 2** | Review parsed transactions for accuracy | Only you know if the parser got it right |
 | **Phase 2** | Initial category assignments (first ~50 transactions) | Trains the rule engine with your personal patterns |
-| **Phase 3** | Provide remaining bank/CC PDFs (Nubank, N26, Itaú Visa, ScotiaBank Amex) | Agent needs real samples to build parsers |
+| **Phase 3** | Provide remaining bank/CC PDFs (Itaú checking, N26, Itaú Visa, ScotiaBank Amex) | Agent needs real samples to build parsers |
 | **Phase 3** | Validate exchange rate conversions look correct | Spot-check BRL/EUR → CAD amounts |
 | **Phase 3** | Review dashboard layout on your actual phone | Agent can't test on your device |
 | **Phase 4** | Confirm goal targets and deadlines are accurate | Financial decisions are yours |
@@ -486,9 +486,9 @@ Set up a daily cron job (host-level or via a scheduled Docker container) to fetc
 
 Build parsers for your remaining accounts (4 parsers):
 
-- **Nubank** (BRL checking + card) — Nubank PDFs have a specific format.
-- **N26** (EUR checking + card) — N26 statements are typically clean and well-structured.
-- **Itaú Visa** (BRL credit card) — Brazilian credit card statement, likely different format from Nubank.
+- **Itaú checking** (BRL checking account statement).
+- **N26** (EUR checking statement) — N26 statements are typically clean and well-structured.
+- **Itaú Visa** (BRL credit card).
 - **ScotiaBank Amex** (CAD credit card, canceled) — Only needed for historical data import. Build this last, or skip if you don't need past ScotiaBank transactions.
 
 Each parser follows the same `StatementParser` interface. Upload real statements, iterate on the regex until parsing is accurate.
@@ -500,9 +500,9 @@ Each parser follows the same `StatementParser` interface. Upload real statements
 | `desjardins-bank` | Checking | CAD | Phase 2 |
 | `desjardins-cc` | Mastercard | CAD | Phase 2 |
 | `desjardins-savings` | Savings × 2 | CAD | Phase 2 |
-| `nubank` | Checking + card | BRL | Phase 3 |
+| `itau-checking` | Checking | BRL | Phase 3 |
 | `n26` | Checking + card | EUR | Phase 3 |
-| `itau-cc` | Visa credit card | BRL | Phase 3 |
+| `itau-credit_card` | Visa credit card | BRL | Phase 3 |
 | `scotiabank-cc` | Amex (historical) | CAD | Phase 3 (optional) |
 
 ### 3.3 Dashboard — Summary Cards
@@ -602,7 +602,7 @@ jobs:
 
 **Phase 3 deliverable:** All three currencies work with automatic conversion. The dashboard shows your real financial data with interactive charts. Push to main runs CI checks automatically; CD to VPS is set up if VPS is live.
 
-> **Phase 3 polish update (Feb 2026):** route-level lazy loading was added in the web app, and the previous Vite `chunk above 500 kB` warning no longer appears in local builds. Keep bundle-size monitoring as a Phase 5 optimization task.
+> **Phase 3 polish update (Feb 2026):** route-level lazy loading was added in the web app, and the previous Vite `chunk above 500 kB` warning no longer appears in local builds. Transaction CRUD on the Transactions page now supports manual add, edit, and delete flows. Keep bundle-size monitoring as a Phase 5 optimization task.
 
 ---
 
