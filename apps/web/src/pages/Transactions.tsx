@@ -35,11 +35,17 @@ function downloadCsv(filename: string, csv: string, mimeType = 'text/csv;charset
   URL.revokeObjectURL(url);
 }
 
+const DEFAULT_ROWS_PER_PAGE = 50;
+const LARGE_ROWS_THRESHOLD = 120;
+const VIRTUAL_ROW_HEIGHT = 78;
+
 export function TransactionsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_ROWS_PER_PAGE);
   const [accountId, setAccountId] = useState<string | undefined>(
     searchParams.get('accountId') ?? undefined,
   );
@@ -71,8 +77,11 @@ export function TransactionsPage() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [draft, setDraft] = useState<TxDraft | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(540);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const categoryMenuRef = useRef<HTMLDivElement | null>(null);
+  const tableViewportRef = useRef<HTMLDivElement | null>(null);
   const searchParamsKey = searchParams.toString();
 
   useEffect(() => {
@@ -95,11 +104,26 @@ export function TransactionsPage() {
     setPage(1);
   }, [searchParamsKey]);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(1);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    const node = tableViewportRef.current;
+    if (!node) return;
+    node.scrollTop = 0;
+    setScrollTop(0);
+  }, [page, rowsPerPage]);
+
   const utils = trpc.useUtils();
 
   const { data: txData, isLoading } = trpc.transactions.list.useQuery({
     page,
-    limit: 50,
+    limit: rowsPerPage,
     search: search || undefined,
     accountId,
     accountIds,
@@ -180,6 +204,43 @@ export function TransactionsPage() {
   }, [activeCategoryId, activeCategoryIds]);
   const hasActiveSelectionPills =
     selectedAccountFilterIds.length > 0 || selectedCategoryFilterIds.length > 0;
+  const txRows = txData?.data ?? [];
+  const shouldVirtualizeRows = txRows.length >= LARGE_ROWS_THRESHOLD;
+  const virtualWindow = useMemo(() => {
+    if (!shouldVirtualizeRows) {
+      return {
+        startIndex: 0,
+        endIndex: txRows.length,
+        topSpacerHeight: 0,
+        bottomSpacerHeight: 0,
+      };
+    }
+    const safeViewport = Math.max(1, viewportHeight);
+    const overscan = 8;
+    const startIndex = Math.max(0, Math.floor(scrollTop / VIRTUAL_ROW_HEIGHT) - overscan);
+    const visibleCount = Math.ceil(safeViewport / VIRTUAL_ROW_HEIGHT) + overscan * 2;
+    const endIndex = Math.min(txRows.length, startIndex + visibleCount);
+    return {
+      startIndex,
+      endIndex,
+      topSpacerHeight: startIndex * VIRTUAL_ROW_HEIGHT,
+      bottomSpacerHeight: Math.max(0, (txRows.length - endIndex) * VIRTUAL_ROW_HEIGHT),
+    };
+  }, [scrollTop, shouldVirtualizeRows, txRows.length, viewportHeight]);
+  const visibleRows = useMemo(
+    () => txRows.slice(virtualWindow.startIndex, virtualWindow.endIndex),
+    [txRows, virtualWindow.endIndex, virtualWindow.startIndex],
+  );
+
+  useEffect(() => {
+    const node = tableViewportRef.current;
+    if (!node) return;
+    const updateHeight = () => setViewportHeight(node.clientHeight);
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [isLoading, shouldVirtualizeRows, txRows.length]);
 
   useEffect(() => {
     if (!isAccountMenuOpen) return;
@@ -350,8 +411,8 @@ export function TransactionsPage() {
         <input
           type="search"
           placeholder="Search transactions..."
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
           className="flex-1 min-w-48 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl px-4 py-2 text-sm text-[var(--color-white)] placeholder:text-[var(--color-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-cherry-pink)]"
         />
         <div ref={accountMenuRef} className="relative">
@@ -516,6 +577,23 @@ export function TransactionsPage() {
         >
           Add transaction
         </button>
+        <label className="flex items-center gap-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-xs text-[var(--color-muted)]">
+          Rows
+          <select
+            value={rowsPerPage}
+            onChange={(e) => {
+              setRowsPerPage(Number(e.target.value));
+              setPage(1);
+            }}
+            className="bg-transparent text-[var(--color-white)] focus:outline-none"
+          >
+            {[50, 100, 200, 500].map((value) => (
+              <option key={value} value={value} className="bg-[var(--color-surface)]">
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
       {hasActiveSelectionPills && (
         <div className="flex items-center justify-between gap-2 flex-wrap bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl px-3 py-2">
@@ -579,7 +657,15 @@ export function TransactionsPage() {
             No transactions found. Upload a PDF statement to get started.
           </div>
         ) : (
-          <div>
+          <div
+            ref={tableViewportRef}
+            className={shouldVirtualizeRows ? 'max-h-[68vh] overflow-y-auto' : ''}
+            onScroll={
+              shouldVirtualizeRows
+                ? (event) => setScrollTop((event.currentTarget as HTMLDivElement).scrollTop)
+                : undefined
+            }
+          >
             <table className="w-full text-sm table-fixed">
               <colgroup>
                 <col className="w-[10%]" />
@@ -604,7 +690,12 @@ export function TransactionsPage() {
                 </tr>
               </thead>
               <tbody>
-                {txData?.data.map((tx) => {
+                {shouldVirtualizeRows && virtualWindow.topSpacerHeight > 0 && (
+                  <tr>
+                    <td colSpan={6} style={{ height: `${virtualWindow.topSpacerHeight}px` }} />
+                  </tr>
+                )}
+                {visibleRows.map((tx) => {
                   return (
                     <tr
                       key={tx.id}
@@ -706,16 +797,22 @@ export function TransactionsPage() {
                     </tr>
                   );
                 })}
+                {shouldVirtualizeRows && virtualWindow.bottomSpacerHeight > 0 && (
+                  <tr>
+                    <td colSpan={6} style={{ height: `${virtualWindow.bottomSpacerHeight}px` }} />
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
         )}
 
         {/* Pagination */}
-        {txData && txData.total > 50 && (
+        {txData && txData.total > rowsPerPage && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--color-border)]">
             <span className="text-xs text-[var(--color-muted)]">
-              {(page - 1) * 50 + 1}–{Math.min(page * 50, txData.total)} of {txData.total}
+              {(page - 1) * rowsPerPage + 1}–{Math.min(page * rowsPerPage, txData.total)} of{' '}
+              {txData.total}
             </span>
             <div className="flex gap-2">
               <button
@@ -727,7 +824,7 @@ export function TransactionsPage() {
               </button>
               <button
                 onClick={() => setPage((p) => p + 1)}
-                disabled={page * 50 >= txData.total}
+                disabled={page * rowsPerPage >= txData.total}
                 className="px-3 py-1 rounded-lg text-xs bg-[var(--color-surface-hover)] text-[var(--color-muted)] disabled:opacity-40 hover:text-[var(--color-white)] transition-colors"
               >
                 Next →

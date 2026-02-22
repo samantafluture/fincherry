@@ -162,7 +162,30 @@ export const transactionsRouter = router({
     const [data, countResult] = await Promise.all([
       db.query.transactions.findMany({
         where: conditions.length > 0 ? and(...conditions) : undefined,
-        with: { account: true, category: true, subcategory: true },
+        with: {
+          account: {
+            columns: {
+              id: true,
+              name: true,
+              currency: true,
+              institution: true,
+            },
+          },
+          category: {
+            columns: {
+              id: true,
+              name: true,
+              parentId: true,
+            },
+          },
+          subcategory: {
+            columns: {
+              id: true,
+              name: true,
+              parentId: true,
+            },
+          },
+        },
         orderBy: orderFn(orderCol),
         limit: input.limit,
         offset,

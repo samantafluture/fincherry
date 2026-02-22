@@ -778,6 +778,8 @@ echo "0 3 * * * sam /usr/local/bin/fincherry-backup.sh" | sudo tee /etc/cron.d/f
 - **Query optimization** — add `EXPLAIN ANALYZE` to slow queries, add missing indexes.
 - **Image optimization** — lazy load charts that are below the fold.
 
+> **Phase 5 update (Feb 2026):** Transactions page now uses debounced search, configurable page size, and row windowing for large pages. Additional transaction indexes were added for common date/account/category/recurring filter patterns.
+
 ### 5.4 PWA Manifest
 
 Add a basic web app manifest so you can "Add to Home Screen" on your phone:

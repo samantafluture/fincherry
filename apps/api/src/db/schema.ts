@@ -83,6 +83,11 @@ export const transactions = pgTable(
     index('idx_transactions_date').on(table.date),
     index('idx_transactions_account').on(table.accountId),
     index('idx_transactions_category').on(table.categoryId),
+    index('idx_transactions_account_date').on(table.accountId, table.date),
+    index('idx_transactions_category_date').on(table.categoryId, table.date),
+    index('idx_transactions_recurring_date').on(table.isRecurring, table.date),
+    index('idx_transactions_amount_cad').on(table.amountCad),
+    index('idx_transactions_upload').on(table.uploadId),
   ],
 );
 

@@ -1188,7 +1188,7 @@ Since this is a single-user app with sensitive financial data:
 - [x] Budget setting + budget vs. actual tracking.
 - [x] Export (CSV).
 - [ ] Export (PDF reports).
-- [ ] Performance optimization (virtual scrolling, query optimization).
+- [x] Performance optimization (virtualized rows + query/index pass).
 - [x] PWA manifest (installable on mobile home screen).
 - [x] Automated backups (script + cron installer).
 
