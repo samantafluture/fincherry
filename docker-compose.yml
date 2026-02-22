@@ -29,7 +29,9 @@ services:
       DATABASE_URL: postgresql://fincherry:${DB_PASSWORD:-change-me-strong-password}@db:5432/fincherry
       JWT_SECRET: ${JWT_SECRET:-}
       AUTH_PASSPHRASE_HASH: ${AUTH_PASSPHRASE_HASH:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_INSIGHTS_MODEL: ${GEMINI_INSIGHTS_MODEL:-gemini-2.0-flash}
+      GEMINI_CATEGORIZATION_MODEL: ${GEMINI_CATEGORIZATION_MODEL:-gemini-2.0-flash}
     volumes:
       - uploads:/app/uploads
     depends_on:

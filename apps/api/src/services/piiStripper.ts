@@ -1,5 +1,5 @@
 /**
- * PII stripper — anonymizes transaction data before sending to Claude API.
+ * PII stripper — anonymizes transaction data before sending to external AI API.
  * Keeps: dates, CAD amounts, category names, flags (recurring, income/expense).
  * Removes: merchant names, account numbers, addresses, descriptions.
  */

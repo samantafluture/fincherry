@@ -2,7 +2,7 @@
 
 Personal finance dashboard — self-hosted, multi-currency, AI-powered insights.
 
-Tracks income, expenses, and savings goals across CAD, BRL, and EUR accounts. Ingests bank statements via PDF upload, normalizes everything to CAD, and surfaces AI insights via Claude API (with PII stripped before any external call).
+Tracks income, expenses, and savings goals across CAD, BRL, and EUR accounts. Ingests bank statements via PDF upload, normalizes everything to CAD, and surfaces AI insights via Gemini API (with PII stripped before any external call).
 
 ---
 
@@ -16,7 +16,7 @@ Tracks income, expenses, and savings goals across CAD, BRL, and EUR accounts. In
 | API | Fastify 5 + tRPC v11 |
 | Database | PostgreSQL 16 + Drizzle ORM |
 | Auth | Passphrase → bcrypt → JWT (httpOnly cookie) |
-| AI | Claude API (Haiku 4.5 for categorization, Sonnet 4.6 for insights) |
+| AI | Gemini API (`gemini-2.0-flash` by default; configurable via env) |
 | Monorepo | pnpm workspaces |
 
 ---
@@ -60,7 +60,9 @@ NODE_ENV=development
 PORT=3000
 
 # Optional (AI features only)
-ANTHROPIC_API_KEY=
+GEMINI_API_KEY=
+GEMINI_INSIGHTS_MODEL=gemini-2.0-flash
+GEMINI_CATEGORIZATION_MODEL=gemini-2.0-flash
 ```
 
 Generate `AUTH_PASSPHRASE_HASH` with:
@@ -164,7 +166,9 @@ cat > .env << 'EOF'
 DB_PASSWORD=change-me-strong-password
 JWT_SECRET=dev-secret-change-this-in-production-32chars
 AUTH_PASSPHRASE_HASH='$2b$12$...'  # generate with bcryptjs (see Option A step 1)
-ANTHROPIC_API_KEY=sk-ant-...     # optional
+GEMINI_API_KEY=your-gemini-api-key   # optional
+GEMINI_INSIGHTS_MODEL=gemini-2.0-flash
+GEMINI_CATEGORIZATION_MODEL=gemini-2.0-flash
 NODE_ENV=production
 PORT=3000
 EOF
@@ -265,7 +269,7 @@ fincherry/
 │   │   │   ├── trpc/           # tRPC routers (auth, accounts, transactions, …)
 │   │   │   ├── db/             # Drizzle schema, migrations, seed
 │   │   │   ├── parsers/        # Bank PDF parsers (Phase 2)
-│   │   │   ├── services/       # Currency, categorizer, Claude AI, PII stripper
+│   │   │   ├── services/       # Currency, categorizer, AI provider, PII stripper
 │   │   │   └── routes/         # Non-tRPC routes (PDF upload)
 │   │   └── .env                # Local secrets (gitignored)
 │   └── web/                    # React frontend
@@ -301,7 +305,7 @@ At login, enter the original plain passphrase you chose, not the hash string.
 | 1 — Foundation | ✅ Done locally | Monorepo, schema, tRPC, React shell, auth |
 | 2 — PDF Parsing | ✅ Done (Desjardins flow) | Upload + preview + confirm, duplicate detection, category rules, transaction review/edit workflow |
 | 3 — Multi-currency + Dashboard | 🟡 In progress | Exchange-rate conversion + dashboard analytics/filters shipped, transaction CRUD (manual add/edit/delete) added; remaining non-Desjardins parsers are optional before Phase 4 |
-| 4 — Goals + AI | 🔜 | Goal tracking UI, Claude insights, what-if scenarios |
+| 4 — Goals + AI | 🔜 | Goal tracking UI, Gemini insights, what-if scenarios |
 | 5 — Polish | 🔜 | Virtual scrolling, CSV export, recurring detection, ongoing web bundle optimization |
 | VPS Deploy | ⏸ Deferred | Set up after Phase 2–3 work locally |
 

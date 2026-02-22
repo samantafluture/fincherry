@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Sparkles, TrendingDown, AlertTriangle, Lightbulb } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { getDateRange } from '@/lib/dateUtils';
@@ -11,15 +11,36 @@ const ICON_MAP = {
 };
 
 export function AIPage() {
-  const [category, setCategory] = useState('Food & Drink');
+  const [categoryId, setCategoryId] = useState('');
+  const [goalId, setGoalId] = useState('');
   const [reduction, setReduction] = useState(20);
   const { startDate, endDate } = getDateRange('3 months');
 
   const insights = trpc.ai.insights.useMutation();
   const scenario = trpc.ai.scenario.useMutation();
   const { data: categories } = trpc.categories.list.useQuery();
+  const { data: goals } = trpc.goals.list.useQuery();
+  const prediction = trpc.ai.predict.useQuery(
+    { goalId },
+    { enabled: goalId.length > 0 },
+  );
 
-  const topCategories = categories?.filter((c) => c.parentId === null) ?? [];
+  const topCategories = useMemo(
+    () => categories?.filter((c) => c.parentId === null) ?? [],
+    [categories],
+  );
+
+  useEffect(() => {
+    if (!categoryId && topCategories[0]) {
+      setCategoryId(topCategories[0].id);
+    }
+  }, [categoryId, topCategories]);
+
+  useEffect(() => {
+    if (!goalId && goals?.[0]) {
+      setGoalId(goals[0].id);
+    }
+  }, [goalId, goals]);
 
   return (
     <div className="space-y-4">
@@ -85,12 +106,14 @@ export function AIPage() {
 
         <div className="flex gap-3 flex-wrap mb-4">
           <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
             className="bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-white)] focus:outline-none"
           >
             {topCategories.map((c) => (
-              <option key={c.id} value={c.name}>{c.name}</option>
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
             ))}
           </select>
           <div className="flex items-center gap-2">
@@ -108,13 +131,13 @@ export function AIPage() {
           <button
             onClick={() =>
               scenario.mutate({
-                categoryName: category,
+                categoryId,
                 reductionPercent: reduction,
                 startDate,
                 endDate,
               })
             }
-            disabled={scenario.isPending}
+            disabled={scenario.isPending || categoryId.length === 0}
             className="px-4 py-2 bg-[var(--color-indigo-dye)] text-[var(--color-white)] rounded-xl text-sm font-medium hover:bg-[var(--color-sapphire)] disabled:opacity-40 transition-colors"
           >
             {scenario.isPending ? 'Calculating...' : 'Calculate'}
@@ -156,6 +179,66 @@ export function AIPage() {
             </p>
           </div>
         )}
+      </div>
+
+      {/* Goal prediction */}
+      <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5">
+        <h3 className="text-[11px] font-medium tracking-widest uppercase text-[var(--color-muted)] mb-3">
+          Goal Prediction
+        </h3>
+
+        <div className="flex gap-3 flex-wrap mb-4">
+          <select
+            value={goalId}
+            onChange={(e) => setGoalId(e.target.value)}
+            className="bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-white)] focus:outline-none min-w-[220px]"
+          >
+            {(goals ?? []).map((goal) => (
+              <option key={goal.id} value={goal.id}>
+                {goal.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {!goalId ? (
+          <p className="text-xs text-[var(--color-muted)]">No goals available yet.</p>
+        ) : prediction.isLoading ? (
+          <p className="text-xs text-[var(--color-muted)]">Calculating prediction...</p>
+        ) : prediction.isError ? (
+          <p className="text-xs text-[var(--color-coral)]">{prediction.error.message}</p>
+        ) : prediction.data && 'message' in prediction.data ? (
+          <p className="text-xs text-[var(--color-muted)]">{prediction.data.message}</p>
+        ) : prediction.data ? (
+          <div className="bg-[var(--color-surface-hover)] rounded-xl p-4 space-y-2">
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div>
+                <div className="text-lg font-bold font-mono text-[var(--color-cherry-pink)]">
+                  {formatCAD(prediction.data.monthlyContribution)}
+                </div>
+                <div className="text-[10px] text-[var(--color-muted)] mt-0.5">monthly pace</div>
+              </div>
+              <div>
+                <div className="text-lg font-bold font-mono text-[var(--color-soft-blue)]">
+                  {prediction.data.monthsToCompletion ?? '—'}
+                </div>
+                <div className="text-[10px] text-[var(--color-muted)] mt-0.5">months left</div>
+              </div>
+              <div>
+                <div className="text-lg font-bold font-mono text-[var(--color-green)]">
+                  {prediction.data.percentage}%
+                </div>
+                <div className="text-[10px] text-[var(--color-muted)] mt-0.5">completed</div>
+              </div>
+            </div>
+            <p className="text-xs text-[var(--color-muted)]">
+              Projected completion:{' '}
+              <strong className="text-[var(--color-white)]">
+                {prediction.data.projectedDate ?? 'not enough positive pace yet'}
+              </strong>
+            </p>
+          </div>
+        ) : null}
       </div>
     </div>
   );
