@@ -782,6 +782,7 @@ echo "0 3 * * * sam /usr/local/bin/fincherry-backup.sh" | sudo tee /etc/cron.d/f
 
 > **Phase 5 update (Feb 2026):** Transactions page now uses debounced search, configurable page size, and row windowing for large pages. Additional transaction indexes were added for common date/account/category/recurring filter patterns.
 > Bundle-size monitoring is now automated via `pnpm web:bundle:check` (also enforced in CI) with configurable entry/largest-chunk budgets.
+> Dashboard and Goals chart modules now lazy-load on viewport visibility (below-the-fold friendly) to defer chart payload until needed.
 
 ### 5.4 PWA Manifest
 

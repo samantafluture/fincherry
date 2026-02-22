@@ -1,29 +1,21 @@
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { trpc } from '@/lib/trpc';
 import { formatCAD } from '@/lib/formatCurrency';
-import { ChartErrorBoundary } from '@/components/ui/ChartErrorBoundary';
+import { LazyWhenVisible } from '@/components/ui/LazyWhenVisible';
 
 const C = {
-  cherryPink: '#F472B6',
-  softBlue: '#8B9EE0',
   coral: '#F97352',
-  green: '#2DD4A0',
-  deepBlue: '#0B1628',
-  border: '#1A2D45',
-  muted: '#7A8BA8',
-  white: '#F0F0EC',
 };
 
-const tooltipStyle = {
-  contentStyle: {
-    background: C.deepBlue,
-    border: `1px solid ${C.border}`,
-    borderRadius: 10,
-    color: C.white,
-    fontSize: 12,
-  },
-};
+const GoalProgressChart = lazy(() =>
+  import('@/components/charts/GoalProgressChart').then((m) => ({ default: m.GoalProgressChart })),
+);
+
+function GoalChartPlaceholder() {
+  return (
+    <div className="h-[140px] w-full animate-pulse rounded-xl bg-[var(--color-surface-hover)]/80" aria-hidden />
+  );
+}
 
 export function GoalsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -117,33 +109,15 @@ function GoalDetail({ goalId }: { goalId: string }) {
   return (
     <div className="pt-3 border-t border-[var(--color-border)] space-y-3">
       {snapshots.length >= 2 ? (
-        <ChartErrorBoundary
-          fallbackHeight={140}
-          label="Goal progress chart"
-          resetKey={`${goalId}:${snapshots.length}`}
+        <LazyWhenVisible
+          minHeight={140}
+          placeholder={<GoalChartPlaceholder />}
+          rootMargin="120px"
         >
-          <ResponsiveContainer width="100%" height={140}>
-            <AreaChart data={snapshots}>
-              <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-              <XAxis dataKey="snapshotDate" tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
-              <YAxis
-                tick={{ fill: C.muted, fontSize: 9 }}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
-              />
-              <Tooltip {...tooltipStyle} formatter={(v: number) => [`$${v.toLocaleString()}`, undefined]} />
-              <Area
-                type="monotone"
-                dataKey="currentAmount"
-                stroke={C.cherryPink}
-                fill={`${C.cherryPink}20`}
-                strokeWidth={2}
-                name="Balance"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </ChartErrorBoundary>
+          <Suspense fallback={<GoalChartPlaceholder />}>
+            <GoalProgressChart goalId={goalId} snapshots={snapshots} />
+          </Suspense>
+        </LazyWhenVisible>
       ) : (
         <p className="text-xs text-[var(--color-muted)] py-2">
           Upload more savings statements to see the progress chart.

@@ -1,14 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area,
-  XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
-} from 'recharts';
 import { trpc } from '@/lib/trpc';
 import { getDateRange, currentMonthLabel } from '@/lib/dateUtils';
 import { formatCAD } from '@/lib/formatCurrency';
 import { buildCategoryPathMap, buildGroupedCategoryOptions } from '@/lib/categoryPaths';
-import { ChartErrorBoundary } from '@/components/ui/ChartErrorBoundary';
+import { LazyWhenVisible } from '@/components/ui/LazyWhenVisible';
 
 // ── Design tokens for charts ──────────────────────────────────────────
 const C = {
@@ -25,30 +21,24 @@ const C = {
   white: '#F0F0EC',
 };
 
-const tooltipStyle = {
-  contentStyle: {
-    background: C.deepBlue,
-    border: `1px solid ${C.border}`,
-    borderRadius: 10,
-    color: C.white,
-    fontSize: 12,
-  },
-  labelStyle: {
-    color: C.white,
-    fontSize: 11,
-    fontWeight: 600,
-  },
-  itemStyle: {
-    color: C.white,
-    fontSize: 11,
-  },
-  cursor: {
-    fill: 'rgba(244, 114, 182, 0.08)',
-  },
-};
-
 const DATE_PRESETS = ['This month', '3 months', '6 months', 'YTD'] as const;
 type DatePreset = (typeof DATE_PRESETS)[number];
+
+const IncomeVsExpensesChart = lazy(() =>
+  import('@/components/charts/IncomeVsExpensesChart').then((m) => ({
+    default: m.IncomeVsExpensesChart,
+  })),
+);
+const CategoryTrendsChart = lazy(() =>
+  import('@/components/charts/CategoryTrendsChart').then((m) => ({
+    default: m.CategoryTrendsChart,
+  })),
+);
+const CategoryBreakdownChart = lazy(() =>
+  import('@/components/charts/CategoryBreakdownChart').then((m) => ({
+    default: m.CategoryBreakdownChart,
+  })),
+);
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
@@ -75,6 +65,16 @@ function SkeletonCard() {
       <div className="h-7 w-32 bg-[var(--color-surface-hover)] rounded mb-2" />
       <div className="h-3 w-20 bg-[var(--color-surface-hover)] rounded" />
     </div>
+  );
+}
+
+function ChartSectionPlaceholder({ height }: { height: number }) {
+  return (
+    <div
+      className="w-full animate-pulse rounded-xl bg-[var(--color-surface-hover)]/80"
+      style={{ height }}
+      aria-hidden
+    />
   );
 }
 
@@ -158,7 +158,6 @@ export function DashboardPage() {
     if (!trends || trends.length === 0) return [];
     return Object.keys(trends[0] ?? {}).filter((k) => k !== 'month');
   }, [trends]);
-  const trendPalette = [C.cherryPink, C.softBlue, C.sapphire, C.coral, C.green];
   const filteredAccounts = useMemo(() => {
     if (!accounts) return [];
     const q = accountSearch.trim().toLowerCase();
@@ -523,18 +522,15 @@ export function DashboardPage() {
       <Card>
         <SectionTitle>Income vs Expenses</SectionTitle>
         {incomeVsExpense && incomeVsExpense.length > 0 ? (
-          <ChartErrorBoundary
-            fallbackHeight={200}
-            label="Income vs expenses chart"
-            resetKey={`${startDate}:${endDate}:${selectedAccountIds.join(',')}:${selectedCategoryIds.join(',')}`}
+          <LazyWhenVisible
+            minHeight={200}
+            placeholder={<ChartSectionPlaceholder height={200} />}
+            rootMargin="220px"
           >
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart
+            <Suspense fallback={<ChartSectionPlaceholder height={200} />}>
+              <IncomeVsExpensesChart
                 data={incomeVsExpense}
-                barGap={3}
-                onClick={(state: { activePayload?: Array<{ payload?: { monthKey?: string } }> }) => {
-                  const monthKey = state.activePayload?.[0]?.payload?.monthKey;
-                  if (!monthKey) return;
+                onMonthClick={(monthKey) => {
                   const bounds = toMonthBounds(monthKey);
                   if (!bounds) return;
                   goToTransactions({
@@ -544,22 +540,10 @@ export function DashboardPage() {
                     categoryIds: selectedCategoryIds.length > 0 ? selectedCategoryIds.join(',') : undefined,
                   });
                 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-                <XAxis dataKey="month" tick={{ fill: C.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis
-                  tick={{ fill: C.muted, fontSize: 10 }}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
-                />
-                <Tooltip {...tooltipStyle} formatter={(v: number) => [`$${v.toLocaleString()}`, undefined]} />
-                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, color: C.muted }} />
-                <Bar dataKey="income" fill={C.green} radius={[5, 5, 0, 0]} name="Income" />
-                <Bar dataKey="expenses" fill={C.coral} radius={[5, 5, 0, 0]} name="Expenses" />
-              </BarChart>
-            </ResponsiveContainer>
-          </ChartErrorBoundary>
+                resetKey={`${startDate}:${endDate}:${selectedAccountIds.join(',')}:${selectedCategoryIds.join(',')}`}
+              />
+            </Suspense>
+          </LazyWhenVisible>
         ) : (
           <div className="h-[200px] flex items-center justify-center text-sm text-[var(--color-muted)]">
             No data yet — upload a bank statement to get started
@@ -570,36 +554,19 @@ export function DashboardPage() {
       <Card>
         <SectionTitle>Category Trends</SectionTitle>
         {trends && trends.length > 0 && trendKeys.length > 0 ? (
-          <ChartErrorBoundary
-            fallbackHeight={220}
-            label="Category trends chart"
-            resetKey={`${startDate}:${endDate}:${trendKeys.join('|')}`}
+          <LazyWhenVisible
+            minHeight={220}
+            placeholder={<ChartSectionPlaceholder height={220} />}
+            rootMargin="220px"
           >
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={trends}>
-                <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-                <XAxis dataKey="month" tick={{ fill: C.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis
-                  tick={{ fill: C.muted, fontSize: 10 }}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(v: number) => `$${Math.round(v)}`}
-                />
-                <Tooltip {...tooltipStyle} formatter={(v: number) => [formatCAD(v), undefined]} />
-                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, color: C.muted }} />
-                {trendKeys.map((key, idx) => (
-                  <Line
-                    key={key}
-                    type="monotone"
-                    dataKey={key}
-                    stroke={trendPalette[idx % trendPalette.length]}
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          </ChartErrorBoundary>
+            <Suspense fallback={<ChartSectionPlaceholder height={220} />}>
+              <CategoryTrendsChart
+                data={trends}
+                trendKeys={trendKeys}
+                resetKey={`${startDate}:${endDate}:${trendKeys.join('|')}`}
+              />
+            </Suspense>
+          </LazyWhenVisible>
         ) : (
           <div className="h-[220px] flex items-center justify-center text-sm text-[var(--color-muted)]">
             Not enough trend data yet
@@ -615,42 +582,26 @@ export function DashboardPage() {
           {byCategory && byCategory.length > 0 ? (
             <div className="space-y-3">
               <div className="mx-auto w-full max-w-[220px]">
-                <ChartErrorBoundary
-                  fallbackHeight={150}
-                  label="Category breakdown chart"
-                  resetKey={`${startDate}:${endDate}:${byCategory.length}`}
+                <LazyWhenVisible
+                  minHeight={150}
+                  placeholder={<ChartSectionPlaceholder height={150} />}
+                  rootMargin="220px"
                 >
-                  <ResponsiveContainer width="100%" height={150}>
-                    <PieChart>
-                      <Pie
-                        data={byCategory}
-                        dataKey="amount"
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={40}
-                        outerRadius={62}
-                        strokeWidth={0}
-                        onClick={(entry: { categoryId?: string | null }) => {
-                          if (!entry?.categoryId) return;
-                          goToTransactions({
-                            categoryId: entry.categoryId,
-                            accountIds: selectedAccountIds.length > 0 ? selectedAccountIds.join(',') : undefined,
-                            startDate,
-                            endDate,
-                          });
-                        }}
-                      >
-                        {byCategory.map((c, i) => (
-                          <Cell key={i} fill={c.color ?? C.muted} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        {...tooltipStyle}
-                        formatter={(v: number, label) => [formatCAD(v), String(label ?? '')]}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </ChartErrorBoundary>
+                  <Suspense fallback={<ChartSectionPlaceholder height={150} />}>
+                    <CategoryBreakdownChart
+                      data={byCategory}
+                      onCategoryClick={(categoryId) => {
+                        goToTransactions({
+                          categoryId,
+                          accountIds: selectedAccountIds.length > 0 ? selectedAccountIds.join(',') : undefined,
+                          startDate,
+                          endDate,
+                        });
+                      }}
+                      resetKey={`${startDate}:${endDate}:${byCategory.length}`}
+                    />
+                  </Suspense>
+                </LazyWhenVisible>
               </div>
               <div className="grid grid-cols-1 gap-1.5">
                 {byCategory.slice(0, 6).map((c) => (
