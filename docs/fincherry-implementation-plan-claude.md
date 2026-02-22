@@ -763,6 +763,9 @@ echo "0 3 * * * sam /usr/local/bin/fincherry-backup.sh" | sudo tee /etc/cron.d/f
 # docker compose exec -T db pg_restore -U fincherry -d fincherry_test /path/to/dump
 ```
 
+> **Phase 5 update (Feb 2026):** repository scripts now implement this workflow locally:
+> `pnpm db:backup`, `pnpm db:restore`, and `pnpm db:backup:cron`. The manual restore verification step is still required once per environment.
+
 ### 5.2 Loading States & Error Handling
 
 - Add shadcn `Skeleton` components for every data-loading state.

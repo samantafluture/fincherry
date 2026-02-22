@@ -1190,7 +1190,7 @@ Since this is a single-user app with sensitive financial data:
 - [ ] Export (PDF reports).
 - [ ] Performance optimization (virtual scrolling, query optimization).
 - [x] PWA manifest (installable on mobile home screen).
-- [ ] Automated backups.
+- [x] Automated backups (script + cron installer).
 
 ---
 

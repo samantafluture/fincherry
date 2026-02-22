@@ -235,6 +235,9 @@ pnpm dev:web          # Vite dev server (HMR)
 # Database
 pnpm db:up           # Start/recreate local PostgreSQL container
 pnpm db:setup        # db:up + db:push + db:seed
+pnpm db:backup       # Create timestamped PostgreSQL dump in ./backups
+pnpm db:restore -- backups/<file>.dump [target_db] [--replace-target]  # Restore dump into a DB
+pnpm db:backup:cron  # Install daily backup cron job for current user (3 AM default)
 pnpm --filter @fincherry/api db:push  # Push Drizzle schema to DB (dev — no migration files)
 pnpm db:generate      # Generate migration files (for production)
 pnpm db:migrate       # Run migrations
@@ -255,6 +258,69 @@ docker compose exec db psql -U fincherry fincherry  # PostgreSQL shell
 docker compose down              # Stop all containers
 docker compose down -v           # Stop and delete volumes (⚠ deletes data)
 ```
+
+---
+
+## Backup and Restore (Phase 5)
+
+Run from repo root: `~/Development/fincherry`.
+
+### Create backup
+
+```bash
+pnpm db:backup
+```
+
+Creates a timestamped dump at `./backups/fincherry_YYYYMMDDTHHMMSSZ.dump`.
+
+Optional retention cleanup:
+
+```bash
+FINCHERRY_BACKUP_RETENTION_DAYS=7 pnpm db:backup
+```
+
+### Restore backup safely (test DB first)
+
+```bash
+pnpm db:restore -- backups/<your-file>.dump
+```
+
+Default restore target is `fincherry_restore_test`, so your main DB is untouched.
+
+If you want to replace an existing target DB:
+
+```bash
+pnpm db:restore -- backups/<your-file>.dump fincherry_restore_test --replace-target
+```
+
+### Enable automatic daily backups (cron)
+
+```bash
+pnpm db:backup:cron
+```
+
+Defaults:
+- Schedule: `0 3 * * *` (3:00 AM)
+- Retention: 7 days
+
+Customize:
+
+```bash
+FINCHERRY_BACKUP_CRON_SCHEDULE="0 2 * * *" FINCHERRY_BACKUP_RETENTION_DAYS=14 pnpm db:backup:cron
+```
+
+Remove cron entry:
+
+```bash
+pnpm db:backup:cron -- --remove
+```
+
+Manual verification (recommended once):
+
+1. Create a backup with `pnpm db:backup`.
+2. Restore to test DB with `pnpm db:restore -- backups/<file>.dump fincherry_restore_test --replace-target`.
+3. Check tables in restored DB:
+   `docker compose exec -T db psql -U fincherry -d fincherry_restore_test -c "\dt"`.
 
 ---
 
@@ -323,4 +389,5 @@ At login, enter the original plain passphrase you chose, not the hash string.
 - ✅ Done: Chart error boundaries wrap dashboard and goals charts (isolated failures, no full-page crash).
 - ✅ Done: Transactions page now supports CSV export using the current active filters (account/category/date/search), suitable for tax/manual analysis.
 - ✅ Done: Settings now has recurring-transaction detection (weekly/biweekly/monthly/quarterly pattern scan) and can auto-flag matched transactions.
+- ✅ Done: Backup/restore workflow is scripted (`pnpm db:backup`, `pnpm db:restore`) with optional cron installer (`pnpm db:backup:cron`).
 - ℹ️ CSV export currently caps at 10,000 rows per export to prevent accidental oversized downloads.
