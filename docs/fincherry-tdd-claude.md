@@ -1184,7 +1184,7 @@ Since this is a single-user app with sensitive financial data:
 
 ### Phase 5 — Polish & Iterate (Ongoing)
 
-- [ ] Recurring transaction detection.
+- [x] Recurring transaction detection.
 - [ ] Budget setting + budget vs. actual tracking.
 - [x] Export (CSV).
 - [ ] Export (PDF reports).

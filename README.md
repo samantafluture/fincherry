@@ -322,4 +322,5 @@ At login, enter the original plain passphrase you chose, not the hash string.
 
 - ✅ Done: Chart error boundaries wrap dashboard and goals charts (isolated failures, no full-page crash).
 - ✅ Done: Transactions page now supports CSV export using the current active filters (account/category/date/search), suitable for tax/manual analysis.
+- ✅ Done: Settings now has recurring-transaction detection (weekly/biweekly/monthly/quarterly pattern scan) and can auto-flag matched transactions.
 - ℹ️ CSV export currently caps at 10,000 rows per export to prevent accidental oversized downloads.

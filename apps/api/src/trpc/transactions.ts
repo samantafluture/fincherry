@@ -4,6 +4,7 @@ import { router, protectedProcedure } from './trpc.js';
 import { db } from '../db/index.js';
 import { categories, transactions } from '../db/schema.js';
 import { convertToCad } from '../services/currencyConverter.js';
+import { detectRecurringCandidates } from '../services/recurringDetection.js';
 
 const transactionFiltersSchema = z.object({
   page: z.number().int().min(1).default(1),
@@ -45,6 +46,11 @@ const createTransactionSchema = z.object({
 
 const updateTransactionSchema = createTransactionSchema.partial().extend({
   id: z.string().uuid(),
+});
+
+const detectRecurringSchema = z.object({
+  apply: z.boolean().default(true),
+  lookbackMonths: z.number().int().min(1).max(60).default(24),
 });
 
 type TransactionFilterInput = Pick<
@@ -266,6 +272,53 @@ export const transactionsRouter = router({
         rowCount: txRows.length,
         truncated: txRows.length >= input.maxRows,
         csv: toCsv(csvRows),
+      };
+    }),
+
+  detectRecurring: protectedProcedure
+    .input(detectRecurringSchema)
+    .mutation(async ({ input }) => {
+      const now = new Date();
+      const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      start.setUTCMonth(start.getUTCMonth() - input.lookbackMonths);
+      const startDate = start.toISOString().slice(0, 10);
+
+      const rows = await db.query.transactions.findMany({
+        where: gte(transactions.date, startDate),
+        columns: {
+          id: true,
+          accountId: true,
+          date: true,
+          description: true,
+          amountCad: true,
+          isRecurring: true,
+        },
+      });
+
+      const candidates = detectRecurringCandidates(rows);
+      const detectedIdSet = new Set(
+        candidates.flatMap((candidate) => candidate.transactionIds),
+      );
+      const detectedIds = Array.from(detectedIdSet);
+      const toUpdate = rows
+        .filter((tx) => detectedIdSet.has(tx.id) && !tx.isRecurring)
+        .map((tx) => tx.id);
+
+      if (input.apply && toUpdate.length > 0) {
+        await db
+          .update(transactions)
+          .set({ isRecurring: true, updatedAt: new Date() })
+          .where(inArray(transactions.id, toUpdate));
+      }
+
+      return {
+        scanned: rows.length,
+        groups: candidates.length,
+        detected: detectedIds.length,
+        updated: input.apply ? toUpdate.length : 0,
+        applied: input.apply,
+        lookbackMonths: input.lookbackMonths,
+        topCandidates: candidates.slice(0, 12),
       };
     }),
 

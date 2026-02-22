@@ -798,6 +798,8 @@ After a few months of data, add a background job that detects recurring patterns
 - Same merchant + similar amount + regular interval (monthly, weekly).
 - Flag them in the UI so you know your fixed costs vs. variable spending.
 
+> **Phase 5 update (Feb 2026):** an on-demand recurring detector is available in Settings. It scans recent transactions for interval + amount consistency and flags matched rows as recurring. Background scheduling remains optional for later.
+
 ### 5.6 Export
 
 - **CSV export** of filtered transactions (for tax prep or manual analysis).

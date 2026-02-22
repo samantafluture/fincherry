@@ -397,7 +397,24 @@ function CategoriesSettings() {
 function RulesSettings() {
   const utils = trpc.useUtils();
   const { data: rules } = trpc.categories.listRules.useQuery();
+  const { data: accounts } = trpc.accounts.list.useQuery();
   const [ruleMessage, setRuleMessage] = useState<string | null>(null);
+  const [recurringMessage, setRecurringMessage] = useState<string | null>(null);
+  const [lookbackMonths, setLookbackMonths] = useState(24);
+  const [recurringPreview, setRecurringPreview] = useState<
+    {
+      key: string;
+      accountId: string;
+      description: string;
+      period: string;
+      confidence: number;
+      medianAmountCad: number;
+      count: number;
+      firstDate: string;
+      lastDate: string;
+      transactionIds: string[];
+    }[]
+  >([]);
   const deleteRule = trpc.categories.deleteRule.useMutation({
     onSuccess: async () => {
       await utils.categories.listRules.invalidate();
@@ -440,6 +457,20 @@ function RulesSettings() {
     },
     onError: (err) => setRuleMessage(err.message),
   });
+  const detectRecurring = trpc.transactions.detectRecurring.useMutation({
+    onSuccess: async (result) => {
+      await Promise.all([
+        utils.transactions.list.invalidate(),
+        utils.analytics.invalidate(),
+        utils.accounts.list.invalidate(),
+      ]);
+      setRecurringPreview(result.topCandidates);
+      setRecurringMessage(
+        `Scanned ${result.scanned} transactions and found ${result.detected} recurring transactions across ${result.groups} groups. Updated ${result.updated} new recurring flags.`,
+      );
+    },
+    onError: (err) => setRecurringMessage(err.message),
+  });
   const { data: cats } = trpc.categories.list.useQuery();
   const categoryPathById = useMemo(
     () => buildCategoryPathMap(cats ?? []),
@@ -452,6 +483,10 @@ function RulesSettings() {
 
   const [pattern, setPattern] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const accountNameById = useMemo(
+    () => new Map((accounts ?? []).map((account) => [account.id, account.name])),
+    [accounts],
+  );
 
   return (
     <div className="space-y-4">
@@ -500,6 +535,81 @@ function RulesSettings() {
         </div>
         {ruleMessage && (
           <p className="text-xs text-[var(--color-muted)]">{ruleMessage}</p>
+        )}
+      </div>
+
+      <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 space-y-3">
+        <h3 className="text-[11px] font-medium tracking-widest uppercase text-[var(--color-muted)]">
+          Recurring Detection
+        </h3>
+        <div className="flex items-center gap-2 flex-wrap">
+          <label className="text-xs text-[var(--color-muted)]">
+            Lookback (months)
+          </label>
+          <input
+            type="number"
+            min={1}
+            max={60}
+            value={lookbackMonths}
+            onChange={(e) => {
+              const value = Number(e.target.value);
+              if (!Number.isFinite(value)) return;
+              setLookbackMonths(Math.max(1, Math.min(60, Math.round(value))));
+            }}
+            className="w-20 bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-white)] focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={() => detectRecurring.mutate({ apply: true, lookbackMonths })}
+            disabled={detectRecurring.isPending}
+            className="px-4 py-2 bg-[var(--color-surface-hover)] border border-[var(--color-border)] text-[var(--color-soft-blue)] rounded-xl text-sm font-medium disabled:opacity-40 hover:text-[var(--color-white)] transition-colors"
+          >
+            {detectRecurring.isPending ? 'Detecting...' : 'Detect recurring transactions'}
+          </button>
+        </div>
+        <p className="text-xs text-[var(--color-muted)]">
+          Detects repeated descriptions on consistent schedules (weekly/biweekly/monthly/quarterly) with similar amounts and flags them as recurring.
+        </p>
+        {recurringMessage && (
+          <p className="text-xs text-[var(--color-muted)]">{recurringMessage}</p>
+        )}
+        {recurringPreview.length > 0 && (
+          <div className="overflow-x-auto border border-[var(--color-border)] rounded-xl">
+            <table className="w-full text-xs">
+              <thead className="border-b border-[var(--color-border)]">
+                <tr>
+                  {['Description', 'Account', 'Period', 'Count', 'Confidence', 'Median (CAD)'].map(
+                    (h) => (
+                      <th
+                        key={h}
+                        className="text-left px-3 py-2 text-[10px] font-medium tracking-wider uppercase text-[var(--color-muted)]"
+                      >
+                        {h}
+                      </th>
+                    ),
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {recurringPreview.map((item) => (
+                  <tr key={item.key} className="border-b border-[var(--color-border)] last:border-0">
+                    <td className="px-3 py-2 text-[var(--color-white)]">{item.description}</td>
+                    <td className="px-3 py-2 text-[var(--color-muted)]">
+                      {accountNameById.get(item.accountId) ?? 'Unknown'}
+                    </td>
+                    <td className="px-3 py-2 text-[var(--color-muted)] capitalize">{item.period}</td>
+                    <td className="px-3 py-2 text-[var(--color-muted)]">{item.count}</td>
+                    <td className="px-3 py-2 text-[var(--color-muted)]">
+                      {Math.round(item.confidence * 100)}%
+                    </td>
+                    <td className="px-3 py-2 text-[var(--color-muted)]">
+                      {item.medianAmountCad.toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
