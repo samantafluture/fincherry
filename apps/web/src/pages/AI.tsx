@@ -43,6 +43,105 @@ function currentMonthValue(): string {
   return toIsoDate(new Date()).slice(0, 7);
 }
 
+type StoredReportInsight = {
+  type?: string;
+  title?: string;
+  body?: string;
+};
+
+type StoredReportResponse = {
+  insights?: StoredReportInsight[];
+  meta?: {
+    provider?: string;
+    model?: string;
+    generatedAt?: string;
+    fallbackReason?: string;
+  };
+};
+
+type MonthlyReportItem = {
+  id: string;
+  reportMonth: string;
+  periodStart: string;
+  periodEnd: string;
+  provider: string;
+  createdAt: string | Date;
+  response: unknown;
+};
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function openMonthlyReportPdf(report: MonthlyReportItem): void {
+  const parsed = (report.response ?? null) as StoredReportResponse | null;
+  const insights = Array.isArray(parsed?.insights) ? parsed!.insights! : [];
+  const generatedAt = new Date(report.createdAt).toLocaleString();
+  const title = `FinCherry Monthly Report ${report.reportMonth}`;
+  const body = insights
+    .map((item) => {
+      const safeTitle = escapeHtml(item.title ?? 'Insight');
+      const safeBody = escapeHtml(item.body ?? '');
+      return `<section class="insight">
+        <h3>${safeTitle}</h3>
+        <p>${safeBody}</p>
+      </section>`;
+    })
+    .join('');
+
+  const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>${escapeHtml(title)}</title>
+    <style>
+      @page { size: A4; margin: 18mm; }
+      body { font-family: Arial, sans-serif; color: #0b1628; margin: 0; }
+      h1 { margin: 0 0 8px; font-size: 20px; }
+      .meta { color: #4b5563; font-size: 12px; line-height: 1.45; margin-bottom: 16px; }
+      .insight { border: 1px solid #d1d5db; border-radius: 8px; padding: 12px; margin-bottom: 10px; break-inside: avoid; }
+      .insight h3 { margin: 0 0 6px; font-size: 14px; color: #0f2035; }
+      .insight p { margin: 0; font-size: 12px; line-height: 1.5; white-space: pre-wrap; }
+      .empty { font-size: 12px; color: #6b7280; }
+    </style>
+  </head>
+  <body>
+    <h1>${escapeHtml(title)}</h1>
+    <div class="meta">
+      <div><strong>Period:</strong> ${escapeHtml(report.periodStart)} to ${escapeHtml(
+        report.periodEnd,
+      )}</div>
+      <div><strong>Generated:</strong> ${escapeHtml(generatedAt)}</div>
+      <div><strong>Provider:</strong> ${escapeHtml(report.provider)}</div>
+      ${
+        parsed?.meta?.model
+          ? `<div><strong>Model:</strong> ${escapeHtml(parsed.meta.model)}</div>`
+          : ''
+      }
+    </div>
+    ${body || '<p class="empty">No insights were available for this report.</p>'}
+  </body>
+</html>`;
+
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    window.alert('Popup blocked. Allow popups to export PDF.');
+    return;
+  }
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+  window.setTimeout(() => {
+    printWindow.print();
+  }, 150);
+}
+
 export function AIPage() {
   const [categoryId, setCategoryId] = useState('');
   const [goalId, setGoalId] = useState('');
@@ -392,21 +491,42 @@ export function AIPage() {
           >
             Regenerate Report
           </button>
+          <button
+            onClick={() => {
+              const latest = monthlyReports.data?.[0];
+              if (!latest) return;
+              openMonthlyReportPdf(latest as MonthlyReportItem);
+            }}
+            disabled={!monthlyReports.data || monthlyReports.data.length === 0}
+            className="px-4 py-2.5 bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl text-sm text-[var(--color-white)] hover:border-[var(--color-soft-blue)] disabled:opacity-40 transition-colors"
+          >
+            Export Latest PDF
+          </button>
         </div>
+        <p className="mt-2 text-[11px] text-[var(--color-muted)]">
+          Export opens a print-ready view. Choose <span className="font-semibold">Save as PDF</span> in the print dialog.
+        </p>
 
         <div className="mt-4 space-y-2">
           {(monthlyReports.data ?? []).map((report) => {
-            const response = report.response as {
-              insights?: Array<{ title: string; body: string }>;
-            } | null;
+            const response = report.response as StoredReportResponse | null;
             const firstInsight = response?.insights?.[0];
             return (
               <div
                 key={report.id}
                 className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-hover)] p-3"
               >
-                <div className="text-xs text-[var(--color-muted)]">
-                  {report.reportMonth} · {new Date(report.createdAt).toLocaleString()} · {report.provider}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="text-xs text-[var(--color-muted)]">
+                    {report.reportMonth} · {new Date(report.createdAt).toLocaleString()} · {report.provider}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openMonthlyReportPdf(report as MonthlyReportItem)}
+                    className="px-2.5 py-1 rounded-lg text-[11px] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-white)] hover:border-[var(--color-soft-blue)] transition-colors shrink-0"
+                  >
+                    Export PDF
+                  </button>
                 </div>
                 {firstInsight ? (
                   <p className="text-sm text-[var(--color-white)] mt-1">

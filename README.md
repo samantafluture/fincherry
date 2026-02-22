@@ -394,5 +394,6 @@ At login, enter the original plain passphrase you chose, not the hash string.
 - ✅ Done: Backup/restore workflow is scripted (`pnpm db:backup`, `pnpm db:restore`) with optional cron installer (`pnpm db:backup:cron`).
 - ✅ Done: Budget vs actual tracking is available in Settings and summarized on Dashboard for selected periods.
 - ✅ Done: Transactions performance improved with debounced search, adjustable page size, and virtualized row windowing for large pages.
+- ✅ Done: Monthly Reports now support PDF export from the AI page (print-ready export flow).
 - ℹ️ CSV export currently caps at 10,000 rows per export to prevent accidental oversized downloads.
 - ⚠️ Required after pulling latest changes: run `pnpm db:push` (adds `budgets` table + transaction indexes), then restart API.
