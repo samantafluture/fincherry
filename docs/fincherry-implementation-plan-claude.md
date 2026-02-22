@@ -803,6 +803,8 @@ After a few months of data, add a background job that detects recurring patterns
 - **CSV export** of filtered transactions (for tax prep or manual analysis).
 - **Monthly PDF report** — summary of the month, auto-generated. (Nice-to-have, not essential.)
 
+> **Phase 5 update (Feb 2026):** CSV export is implemented in the Transactions page and respects active filters (account/category/date/search). PDF report export remains pending.
+
 ---
 
 ## Phase 6 — AI-Generated Visualizations (Post-MVP)

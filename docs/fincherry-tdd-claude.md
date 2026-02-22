@@ -1186,9 +1186,10 @@ Since this is a single-user app with sensitive financial data:
 
 - [ ] Recurring transaction detection.
 - [ ] Budget setting + budget vs. actual tracking.
-- [ ] Export (CSV, PDF reports).
+- [x] Export (CSV).
+- [ ] Export (PDF reports).
 - [ ] Performance optimization (virtual scrolling, query optimization).
-- [ ] PWA manifest (installable on mobile home screen).
+- [x] PWA manifest (installable on mobile home screen).
 - [ ] Automated backups.
 
 ---

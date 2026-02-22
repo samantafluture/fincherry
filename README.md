@@ -317,3 +317,9 @@ At login, enter the original plain passphrase you chose, not the hash string.
 - ✅ Done: Monthly AI reports can be generated and listed in history.
 - ✅ Done: What-if scenario supports both `Decrease` and `Increase`.
 - ⚠️ Required after pulling latest changes: run `pnpm db:push` (adds `ai_reports` table), then restart API.
+
+### Phase 5 Progress Notes
+
+- ✅ Done: Chart error boundaries wrap dashboard and goals charts (isolated failures, no full-page crash).
+- ✅ Done: Transactions page now supports CSV export using the current active filters (account/category/date/search), suitable for tax/manual analysis.
+- ℹ️ CSV export currently caps at 10,000 rows per export to prevent accidental oversized downloads.

@@ -23,6 +23,18 @@ type TxDraft = {
   categoryId: string;
 };
 
+function downloadCsv(filename: string, csv: string, mimeType = 'text/csv;charset=utf-8') {
+  const blob = new Blob([csv], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function TransactionsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -215,6 +227,11 @@ export function TransactionsPage() {
       utils.analytics.invalidate();
       utils.accounts.list.invalidate();
       utils.goals.list.invalidate();
+    },
+  });
+  const exportCsv = trpc.transactions.exportCsv.useMutation({
+    onSuccess: (result) => {
+      downloadCsv(result.filename, result.csv, result.mimeType);
     },
   });
 
@@ -471,6 +488,26 @@ export function TransactionsPage() {
             </div>
           )}
         </div>
+        <button
+          type="button"
+          disabled={exportCsv.isPending}
+          onClick={() =>
+            exportCsv.mutate({
+              search: search || undefined,
+              accountId,
+              accountIds,
+              categoryId: activeCategoryId,
+              categoryIds: activeCategoryIds,
+              startDate,
+              endDate,
+              sortBy: 'date',
+              sortOrder: 'desc',
+            })
+          }
+          className="bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-white)] rounded-xl px-4 py-2 text-sm disabled:opacity-60"
+        >
+          {exportCsv.isPending ? 'Exporting...' : 'Export CSV'}
+        </button>
         <button
           type="button"
           onClick={openCreateDialog}

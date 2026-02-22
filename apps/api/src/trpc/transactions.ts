@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { eq, and, gte, lte, like, sql, desc, asc, inArray } from 'drizzle-orm';
 import { router, protectedProcedure } from './trpc.js';
 import { db } from '../db/index.js';
-import { transactions } from '../db/schema.js';
+import { categories, transactions } from '../db/schema.js';
 import { convertToCad } from '../services/currencyConverter.js';
 
 const transactionFiltersSchema = z.object({
@@ -23,6 +23,12 @@ const transactionFiltersSchema = z.object({
   currency: z.enum(['CAD', 'BRL', 'EUR']).optional(),
 });
 
+const transactionExportSchema = transactionFiltersSchema
+  .omit({ page: true, limit: true })
+  .extend({
+    maxRows: z.number().int().min(1).max(20000).default(10000),
+  });
+
 const createTransactionSchema = z.object({
   accountId: z.string().uuid(),
   date: z.string(), // ISO date string YYYY-MM-DD
@@ -40,6 +46,21 @@ const createTransactionSchema = z.object({
 const updateTransactionSchema = createTransactionSchema.partial().extend({
   id: z.string().uuid(),
 });
+
+type TransactionFilterInput = Pick<
+  z.infer<typeof transactionFiltersSchema>,
+  | 'startDate'
+  | 'endDate'
+  | 'accountId'
+  | 'accountIds'
+  | 'categoryId'
+  | 'categoryIds'
+  | 'minAmount'
+  | 'maxAmount'
+  | 'search'
+  | 'recurring'
+  | 'currency'
+>;
 
 async function expandCategoryFilterIds(categoryIds: string[]): Promise<string[]> {
   if (categoryIds.length === 0) return [];
@@ -71,31 +92,55 @@ async function expandCategoryFilterIds(categoryIds: string[]): Promise<string[]>
   return Array.from(expanded);
 }
 
+function buildTransactionConditions(
+  input: TransactionFilterInput,
+  expandedCategoryIds: string[],
+) {
+  const conditions = [];
+
+  if (input.startDate) conditions.push(gte(transactions.date, input.startDate));
+  if (input.endDate) conditions.push(lte(transactions.date, input.endDate));
+  if (input.accountIds.length > 0) {
+    conditions.push(inArray(transactions.accountId, input.accountIds));
+  } else if (input.accountId) {
+    conditions.push(eq(transactions.accountId, input.accountId));
+  }
+  if (expandedCategoryIds.length > 0) {
+    conditions.push(inArray(transactions.categoryId, expandedCategoryIds));
+  }
+  if (input.currency) conditions.push(eq(transactions.currency, input.currency));
+  if (input.recurring !== undefined) {
+    conditions.push(eq(transactions.isRecurring, input.recurring));
+  }
+  if (input.search) conditions.push(like(transactions.description, `%${input.search}%`));
+  if (input.minAmount !== undefined) {
+    conditions.push(sql`${transactions.amountCad} >= ${input.minAmount}`);
+  }
+  if (input.maxAmount !== undefined) {
+    conditions.push(sql`${transactions.amountCad} <= ${input.maxAmount}`);
+  }
+
+  return conditions;
+}
+
+function csvEscape(value: string): string {
+  const escaped = value.replace(/"/g, '""');
+  if (/[",\n]/.test(escaped)) return `"${escaped}"`;
+  return escaped;
+}
+
+function toCsv(rows: string[][]): string {
+  return `${rows.map((row) => row.map(csvEscape).join(',')).join('\n')}\n`;
+}
+
 export const transactionsRouter = router({
   list: protectedProcedure.input(transactionFiltersSchema).query(async ({ input }) => {
-    const conditions = [];
-
-    if (input.startDate) conditions.push(gte(transactions.date, input.startDate));
-    if (input.endDate) conditions.push(lte(transactions.date, input.endDate));
-    if (input.accountIds.length > 0) {
-      conditions.push(inArray(transactions.accountId, input.accountIds));
-    } else if (input.accountId) {
-      conditions.push(eq(transactions.accountId, input.accountId));
-    }
-
     const requestedCategoryIds = [
       ...(input.categoryId ? [input.categoryId] : []),
       ...input.categoryIds,
     ];
     const expandedCategoryIds = await expandCategoryFilterIds(requestedCategoryIds);
-    if (expandedCategoryIds.length > 0) {
-      conditions.push(inArray(transactions.categoryId, expandedCategoryIds));
-    }
-
-    if (input.currency) conditions.push(eq(transactions.currency, input.currency));
-    if (input.recurring !== undefined)
-      conditions.push(eq(transactions.isRecurring, input.recurring));
-    if (input.search) conditions.push(like(transactions.description, `%${input.search}%`));
+    const conditions = buildTransactionConditions(input, expandedCategoryIds);
 
     const orderCol =
       input.sortBy === 'date'
@@ -129,6 +174,100 @@ export const transactionsRouter = router({
       limit: input.limit,
     };
   }),
+
+  exportCsv: protectedProcedure
+    .input(transactionExportSchema)
+    .mutation(async ({ input }) => {
+      const requestedCategoryIds = [
+        ...(input.categoryId ? [input.categoryId] : []),
+        ...input.categoryIds,
+      ];
+      const expandedCategoryIds = await expandCategoryFilterIds(requestedCategoryIds);
+      const conditions = buildTransactionConditions(input, expandedCategoryIds);
+      const orderFn = input.sortOrder === 'asc' ? asc : desc;
+      const orderCol =
+        input.sortBy === 'date'
+          ? transactions.date
+          : input.sortBy === 'amount'
+            ? transactions.amountCad
+            : transactions.date;
+
+      const [txRows, allCategories] = await Promise.all([
+        db.query.transactions.findMany({
+          where: conditions.length > 0 ? and(...conditions) : undefined,
+          with: { account: true, category: true, subcategory: true },
+          orderBy: orderFn(orderCol),
+          limit: input.maxRows,
+        }),
+        db
+          .select({ id: categories.id, name: categories.name, parentId: categories.parentId })
+          .from(categories),
+      ]);
+
+      const categoryById = new Map(
+        allCategories.map((category) => [category.id, category] as const),
+      );
+      const categoryPathCache = new Map<string, string>();
+      const getCategoryPath = (id: string | null) => {
+        if (!id) return '';
+        const cached = categoryPathCache.get(id);
+        if (cached) return cached;
+        const parts: string[] = [];
+        let cursor: string | null = id;
+        while (cursor) {
+          const node = categoryById.get(cursor);
+          if (!node) break;
+          parts.unshift(node.name);
+          cursor = node.parentId;
+        }
+        const path = parts.join(' / ');
+        categoryPathCache.set(id, path);
+        return path;
+      };
+
+      const csvRows: string[][] = [
+        [
+          'Date',
+          'Description',
+          'Account',
+          'Institution',
+          'Category Path',
+          'Category',
+          'Subcategory',
+          'Amount',
+          'Currency',
+          'Amount CAD',
+          'Recurring',
+          'Notes',
+        ],
+      ];
+
+      for (const tx of txRows) {
+        csvRows.push([
+          tx.date,
+          tx.description ?? '',
+          tx.account?.name ?? '',
+          tx.account?.institution ?? '',
+          getCategoryPath(tx.categoryId),
+          tx.category?.name ?? '',
+          tx.subcategory?.name ?? '',
+          tx.amount ?? '',
+          tx.currency ?? '',
+          tx.amountCad ?? '',
+          tx.isRecurring ? 'yes' : 'no',
+          tx.notes ?? '',
+        ]);
+      }
+
+      const now = new Date().toISOString().slice(0, 10);
+      return {
+        filename: `fincherry-transactions-${now}.csv`,
+        mimeType: 'text/csv;charset=utf-8',
+        rowCount: txRows.length,
+        truncated: txRows.length >= input.maxRows,
+        csv: toCsv(csvRows),
+      };
+    }),
 
   getById: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
