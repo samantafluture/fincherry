@@ -2,8 +2,11 @@ import { useState, useRef } from 'react';
 import { Upload as UploadIcon } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { formatCAD } from '@/lib/formatCurrency';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { useToast } from '@/components/ui/toast';
 
 export function UploadPage() {
+  const { toast } = useToast();
   const [file, setFile] = useState<File | null>(null);
   const [accountId, setAccountId] = useState('');
   const [uploadId, setUploadId] = useState<string | null>(null);
@@ -24,19 +27,46 @@ export function UploadPage() {
 
   const confirm = trpc.uploads.confirm.useMutation({
     onSuccess: () => {
+      const importedCount = preview?.filter((tx) => !tx.isDuplicate).length ?? 0;
       setFile(null);
       setUploadId(null);
       setAccountId('');
+      toast({
+        variant: 'success',
+        title: 'Import complete',
+        description:
+          importedCount > 0
+            ? `Imported ${importedCount} transaction${importedCount === 1 ? '' : 's'}.`
+            : 'Upload confirmed.',
+      });
     },
-    onError: (err) => setError(err.message),
+    onError: (err) => {
+      setError(err.message);
+      toast({
+        variant: 'error',
+        title: 'Import failed',
+        description: err.message,
+      });
+    },
   });
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     const dropped = e.dataTransfer.files[0];
-    if (dropped?.type === 'application/pdf') setFile(dropped);
-    else setError('Please drop a PDF file');
+    if (dropped?.type === 'application/pdf') {
+      setFile(dropped);
+      setError('');
+      return;
+    }
+
+    setError('Please drop a PDF file');
+    toast({
+      variant: 'error',
+      title: 'Invalid file',
+      description: 'Please drop a PDF file.',
+      durationMs: 4500,
+    });
   };
 
   const handleUpload = async () => {
@@ -62,8 +92,19 @@ export function UploadPage() {
 
       const data = await res.json() as { uploadId: string };
       setUploadId(data.uploadId);
+      toast({
+        variant: 'success',
+        title: 'Statement uploaded',
+        description: 'Preview generated. Review and confirm import.',
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
+      const message = err instanceof Error ? err.message : 'Upload failed';
+      setError(message);
+      toast({
+        variant: 'error',
+        title: 'Parsing failed',
+        description: message,
+      });
     } finally {
       setUploading(false);
     }
@@ -181,7 +222,12 @@ export function UploadPage() {
           </div>
 
           {!preview ? (
-            <div className="p-8 text-center text-[var(--color-muted)] text-sm">Parsing...</div>
+            <div className="space-y-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+              <Skeleton className="h-4 w-44" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
           ) : (
             <>
               <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl overflow-hidden">

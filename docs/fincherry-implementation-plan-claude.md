@@ -772,6 +772,8 @@ echo "0 3 * * * sam /usr/local/bin/fincherry-backup.sh" | sudo tee /etc/cron.d/f
 - Add shadcn `Toast` notifications for: upload success, parsing errors, save confirmations.
 - Add error boundaries around chart components (a broken chart shouldn't crash the page).
 
+> **Phase 5 update (Feb 2026):** Added reusable app-level toast notifications and wired them into upload parse/import and transaction save/delete/export flows. Added shared skeleton loaders for route/auth loading plus upload/transactions data-loading states. Chart error boundaries are active on Dashboard and Goals pages.
+
 ### 5.3 Performance
 
 - **Virtual scrolling** for transaction list if it grows past 500 rows (TanStack Virtual, integrates with DataTable).

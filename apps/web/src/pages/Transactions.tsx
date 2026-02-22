@@ -6,6 +6,8 @@ import {
   buildCategoryPathMap,
   buildGroupedCategoryOptions,
 } from '@/lib/categoryPaths';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { useToast } from '@/components/ui/toast';
 
 function formatPathForDisplay(path: string): string {
   return path.replace(/ > /g, ' / ');
@@ -40,6 +42,7 @@ const LARGE_ROWS_THRESHOLD = 120;
 const VIRTUAL_ROW_HEIGHT = 78;
 
 export function TransactionsPage() {
+  const { toast } = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [searchInput, setSearchInput] = useState('');
@@ -272,6 +275,10 @@ export function TransactionsPage() {
       utils.analytics.invalidate();
       utils.accounts.list.invalidate();
       utils.goals.list.invalidate();
+      toast({ variant: 'success', title: 'Transaction updated', durationMs: 2200 });
+    },
+    onError: (err) => {
+      toast({ variant: 'error', title: 'Update failed', description: err.message });
     },
   });
   const createTx = trpc.transactions.create.useMutation({
@@ -280,6 +287,10 @@ export function TransactionsPage() {
       utils.analytics.invalidate();
       utils.accounts.list.invalidate();
       utils.goals.list.invalidate();
+      toast({ variant: 'success', title: 'Transaction created' });
+    },
+    onError: (err) => {
+      toast({ variant: 'error', title: 'Create failed', description: err.message });
     },
   });
   const deleteTx = trpc.transactions.delete.useMutation({
@@ -288,11 +299,19 @@ export function TransactionsPage() {
       utils.analytics.invalidate();
       utils.accounts.list.invalidate();
       utils.goals.list.invalidate();
+      toast({ variant: 'success', title: 'Transaction deleted' });
+    },
+    onError: (err) => {
+      toast({ variant: 'error', title: 'Delete failed', description: err.message });
     },
   });
   const exportCsv = trpc.transactions.exportCsv.useMutation({
     onSuccess: (result) => {
       downloadCsv(result.filename, result.csv, result.mimeType);
+      toast({ variant: 'info', title: 'CSV exported', description: result.filename });
+    },
+    onError: (err) => {
+      toast({ variant: 'error', title: 'CSV export failed', description: err.message });
     },
   });
 
@@ -651,7 +670,17 @@ export function TransactionsPage() {
       {/* Table */}
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl overflow-hidden">
         {isLoading ? (
-          <div className="p-8 text-center text-[var(--color-muted)] text-sm">Loading...</div>
+          <div className="space-y-2 p-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="grid grid-cols-6 gap-2">
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full col-span-2" />
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
+              </div>
+            ))}
+          </div>
         ) : txData?.data.length === 0 ? (
           <div className="p-8 text-center text-[var(--color-muted)] text-sm">
             No transactions found. Upload a PDF statement to get started.

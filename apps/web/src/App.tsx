@@ -3,6 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { lazy, Suspense, useState } from 'react';
 import { trpc, createTRPCClient } from '@/lib/trpc';
 import { AppShell } from '@/components/layout/AppShell';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { ToastProvider } from '@/components/ui/toast';
 
 const LoginPage = lazy(() =>
   import('@/pages/Login').then((m) => ({ default: m.LoginPage })),
@@ -29,7 +31,12 @@ const SettingsPage = lazy(() =>
 function RouteLoader() {
   return (
     <div className="min-h-screen bg-[var(--color-deep-blue)] flex items-center justify-center">
-      <div className="text-[var(--color-muted)] text-sm animate-pulse">Loading...</div>
+      <div className="w-[min(92vw,24rem)] rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 space-y-3">
+        <Skeleton className="h-4 w-28" />
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-3 w-5/6" />
+        <Skeleton className="h-3 w-2/3" />
+      </div>
     </div>
   );
 }
@@ -38,11 +45,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const { data, isLoading } = trpc.auth.verify.useQuery();
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[var(--color-deep-blue)] flex items-center justify-center">
-        <div className="text-[var(--color-muted)] text-sm animate-pulse">Loading...</div>
-      </div>
-    );
+    return <RouteLoader />;
   }
 
   if (!data?.valid) {
@@ -66,75 +69,77 @@ export default function App() {
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <Routes>
-            <Route
-              path="/login"
-              element={(
-                <Suspense fallback={<RouteLoader />}>
-                  <LoginPage />
-                </Suspense>
-              )}
-            />
-            <Route
-              element={
-                <AuthGuard>
-                  <AppShell />
-                </AuthGuard>
-              }
-            >
+        <ToastProvider>
+          <BrowserRouter>
+            <Routes>
               <Route
-                path="/"
+                path="/login"
                 element={(
                   <Suspense fallback={<RouteLoader />}>
-                    <DashboardPage />
+                    <LoginPage />
                   </Suspense>
                 )}
               />
               <Route
-                path="/transactions"
-                element={(
-                  <Suspense fallback={<RouteLoader />}>
-                    <TransactionsPage />
-                  </Suspense>
-                )}
-              />
-              <Route
-                path="/upload"
-                element={(
-                  <Suspense fallback={<RouteLoader />}>
-                    <UploadPage />
-                  </Suspense>
-                )}
-              />
-              <Route
-                path="/goals"
-                element={(
-                  <Suspense fallback={<RouteLoader />}>
-                    <GoalsPage />
-                  </Suspense>
-                )}
-              />
-              <Route
-                path="/ai"
-                element={(
-                  <Suspense fallback={<RouteLoader />}>
-                    <AIPage />
-                  </Suspense>
-                )}
-              />
-              <Route
-                path="/settings"
-                element={(
-                  <Suspense fallback={<RouteLoader />}>
-                    <SettingsPage />
-                  </Suspense>
-                )}
-              />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
+                element={
+                  <AuthGuard>
+                    <AppShell />
+                  </AuthGuard>
+                }
+              >
+                <Route
+                  path="/"
+                  element={(
+                    <Suspense fallback={<RouteLoader />}>
+                      <DashboardPage />
+                    </Suspense>
+                  )}
+                />
+                <Route
+                  path="/transactions"
+                  element={(
+                    <Suspense fallback={<RouteLoader />}>
+                      <TransactionsPage />
+                    </Suspense>
+                  )}
+                />
+                <Route
+                  path="/upload"
+                  element={(
+                    <Suspense fallback={<RouteLoader />}>
+                      <UploadPage />
+                    </Suspense>
+                  )}
+                />
+                <Route
+                  path="/goals"
+                  element={(
+                    <Suspense fallback={<RouteLoader />}>
+                      <GoalsPage />
+                    </Suspense>
+                  )}
+                />
+                <Route
+                  path="/ai"
+                  element={(
+                    <Suspense fallback={<RouteLoader />}>
+                      <AIPage />
+                    </Suspense>
+                  )}
+                />
+                <Route
+                  path="/settings"
+                  element={(
+                    <Suspense fallback={<RouteLoader />}>
+                      <SettingsPage />
+                    </Suspense>
+                  )}
+                />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Route>
+            </Routes>
+          </BrowserRouter>
+        </ToastProvider>
       </QueryClientProvider>
     </trpc.Provider>
   );
