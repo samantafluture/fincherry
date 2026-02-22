@@ -252,6 +252,8 @@ pnpm db:studio        # Open Drizzle Studio (visual DB browser) at localhost:498
 pnpm build            # Build both API (tsc) and web (vite)
 pnpm build:api        # API only
 pnpm build:web        # Web only
+pnpm web:bundle:check # Validate web bundle budgets (used in CI)
+pnpm web:bundle:report # Show bundle sizes without failing
 
 # Docker
 docker compose up -d db          # Start only PostgreSQL
@@ -316,6 +318,24 @@ Remove cron entry:
 
 ```bash
 pnpm db:backup:cron -- --remove
+```
+
+### Bundle size guardrails (Phase 5)
+
+After a web build, run:
+
+```bash
+pnpm web:bundle:check
+```
+
+Default budgets:
+- Entry chunk (`index-*.js`): `340 kB`
+- Largest single JS chunk: `420 kB`
+
+Override temporarily when needed:
+
+```bash
+FINCHERRY_WEB_ENTRY_BUDGET_KB=360 FINCHERRY_WEB_CHUNK_BUDGET_KB=450 pnpm web:bundle:check
 ```
 
 Automated verification (recommended once per environment):
@@ -410,5 +430,6 @@ At login, enter the original plain passphrase you chose, not the hash string.
 - ✅ Done: Budget vs actual tracking is available in Settings and summarized on Dashboard for selected periods.
 - ✅ Done: Transactions performance improved with debounced search, adjustable page size, and virtualized row windowing for large pages.
 - ✅ Done: Monthly Reports now support PDF export from the AI page (print-ready export flow).
+- ✅ Done: Web bundle budget checks are automated in CI (`pnpm web:bundle:check`) to catch regressions early.
 - ℹ️ CSV export currently caps at 10,000 rows per export to prevent accidental oversized downloads.
 - ⚠️ Required after pulling latest changes: run `pnpm db:push` (adds `budgets` table + transaction indexes), then restart API.

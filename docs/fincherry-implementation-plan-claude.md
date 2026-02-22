@@ -781,6 +781,7 @@ echo "0 3 * * * sam /usr/local/bin/fincherry-backup.sh" | sudo tee /etc/cron.d/f
 - **Image optimization** — lazy load charts that are below the fold.
 
 > **Phase 5 update (Feb 2026):** Transactions page now uses debounced search, configurable page size, and row windowing for large pages. Additional transaction indexes were added for common date/account/category/recurring filter patterns.
+> Bundle-size monitoring is now automated via `pnpm web:bundle:check` (also enforced in CI) with configurable entry/largest-chunk budgets.
 
 ### 5.4 PWA Manifest
 

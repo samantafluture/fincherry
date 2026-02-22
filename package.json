@@ -8,6 +8,8 @@
     "build": "pnpm --filter web build && pnpm --filter api build",
     "build:api": "pnpm --filter api build",
     "build:web": "pnpm --filter web build",
+    "web:bundle:check": "node ./scripts/check-web-bundle-size.mjs",
+    "web:bundle:report": "node ./scripts/check-web-bundle-size.mjs --report-only",
     "db:up": "docker compose up -d db --force-recreate",
     "db:backup": "bash ./scripts/db-backup.sh",
     "db:backup:cron": "bash ./scripts/install-backup-cron.sh",

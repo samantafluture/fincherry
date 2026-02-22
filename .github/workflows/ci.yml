@@ -34,3 +34,6 @@ jobs:
 
       - name: Build web (Vite)
         run: pnpm --filter web build
+
+      - name: Check web bundle budgets
+        run: pnpm web:bundle:check
