@@ -17,7 +17,9 @@ type CategoryTreeNode = {
 };
 
 export function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<'accounts' | 'categories' | 'rules'>('accounts');
+  const [activeTab, setActiveTab] = useState<
+    'accounts' | 'categories' | 'budgets' | 'rules'
+  >('accounts');
 
   return (
     <div className="space-y-4">
@@ -25,7 +27,7 @@ export function SettingsPage() {
 
       {/* Tab bar */}
       <div className="flex gap-1 p-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl w-fit">
-        {(['accounts', 'categories', 'rules'] as const).map((tab) => (
+        {(['accounts', 'categories', 'budgets', 'rules'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -42,6 +44,7 @@ export function SettingsPage() {
 
       {activeTab === 'accounts' && <AccountsSettings />}
       {activeTab === 'categories' && <CategoriesSettings />}
+      {activeTab === 'budgets' && <BudgetsSettings />}
       {activeTab === 'rules' && <RulesSettings />}
     </div>
   );
@@ -647,6 +650,236 @@ function RulesSettings() {
                   </td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BudgetsSettings() {
+  const utils = trpc.useUtils();
+  const today = new Date().toISOString().slice(0, 10);
+  const monthStart = new Date(
+    Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1),
+  )
+    .toISOString()
+    .slice(0, 10);
+  const [categoryId, setCategoryId] = useState('');
+  const [monthlyCad, setMonthlyCad] = useState('');
+  const [budgetMessage, setBudgetMessage] = useState<string | null>(null);
+
+  const { data: categories } = trpc.categories.list.useQuery();
+  const { data: summary } = trpc.budgets.summary.useQuery({
+    startDate: monthStart,
+    endDate: today,
+  });
+
+  const categoryPathById = useMemo(
+    () => buildCategoryPathMap(categories ?? []),
+    [categories],
+  );
+  const groupedExpenseOptions = useMemo(() => {
+    return buildGroupedCategoryOptions(categories ?? [], categoryPathById, {
+      leafOnly: false,
+    })
+      .map((group) => ({
+        ...group,
+        options: group.options.filter((option) => option.path.startsWith('Expense')),
+      }))
+      .filter((group) => group.options.length > 0);
+  }, [categories, categoryPathById]);
+
+  const upsertBudget = trpc.budgets.upsert.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        utils.budgets.summary.invalidate(),
+        utils.budgets.list.invalidate(),
+      ]);
+      setCategoryId('');
+      setMonthlyCad('');
+      setBudgetMessage('Budget saved.');
+    },
+    onError: (err) => setBudgetMessage(err.message),
+  });
+
+  const deleteBudget = trpc.budgets.delete.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        utils.budgets.summary.invalidate(),
+        utils.budgets.list.invalidate(),
+      ]);
+      setBudgetMessage('Budget removed.');
+    },
+    onError: (err) => setBudgetMessage(err.message),
+  });
+
+  const submitBudget = () => {
+    const value = Number(monthlyCad);
+    if (!categoryId || !Number.isFinite(value) || value <= 0) {
+      setBudgetMessage('Select an expense category and enter a valid monthly CAD amount.');
+      return;
+    }
+    upsertBudget.mutate({ categoryId, monthlyCad: value, isActive: true });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 space-y-3">
+        <h3 className="text-[11px] font-medium tracking-widest uppercase text-[var(--color-muted)]">
+          Monthly Budgets (CAD)
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px_auto] gap-2">
+          <select
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
+            className="bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-white)] focus:outline-none"
+          >
+            <option value="">Select expense category</option>
+            {groupedExpenseOptions.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.options.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <input
+            type="number"
+            min="0.01"
+            step="0.01"
+            placeholder="Monthly CAD"
+            value={monthlyCad}
+            onChange={(e) => setMonthlyCad(e.target.value)}
+            className="bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-white)] placeholder:text-[var(--color-muted)] focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={submitBudget}
+            disabled={upsertBudget.isPending}
+            className="px-4 py-2 bg-[var(--color-cherry-pink)] text-[var(--color-deep-blue)] rounded-xl text-sm font-medium disabled:opacity-40"
+          >
+            {upsertBudget.isPending ? 'Saving...' : 'Save budget'}
+          </button>
+        </div>
+        <p className="text-xs text-[var(--color-muted)]">
+          Budgets compare against expenses in the selected category and its child categories.
+        </p>
+        {budgetMessage && <p className="text-xs text-[var(--color-muted)]">{budgetMessage}</p>}
+      </div>
+
+      <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 space-y-3">
+        <h3 className="text-[11px] font-medium tracking-widest uppercase text-[var(--color-muted)]">
+          Budget vs Actual ({summary?.startDate} to {summary?.endDate})
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-hover)] p-3">
+            <div className="text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+              Total Budget
+            </div>
+            <div className="text-lg font-semibold text-[var(--color-white)]">
+              CAD {(summary?.totals.budgetCad ?? 0).toFixed(2)}
+            </div>
+          </div>
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-hover)] p-3">
+            <div className="text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+              Actual Spend
+            </div>
+            <div className="text-lg font-semibold text-[var(--color-white)]">
+              CAD {(summary?.totals.actualCad ?? 0).toFixed(2)}
+            </div>
+          </div>
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-hover)] p-3">
+            <div className="text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+              Utilization
+            </div>
+            <div className="text-lg font-semibold text-[var(--color-white)]">
+              {(summary?.totals.utilizationPct ?? 0).toFixed(1)}%
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl overflow-hidden">
+        {!summary || summary.items.length === 0 ? (
+          <div className="p-6 text-center text-sm text-[var(--color-muted)]">
+            No budgets yet. Add your first monthly budget above.
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[var(--color-border)]">
+                {['Category', 'Monthly', 'Period Budget', 'Actual', 'Remaining', 'Status', ''].map(
+                  (h) => (
+                    <th
+                      key={h}
+                      className="text-left px-4 py-3 text-[11px] font-medium tracking-wider uppercase text-[var(--color-muted)]"
+                    >
+                      {h}
+                    </th>
+                  ),
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {summary.items.map((item) => {
+                const statusClass =
+                  item.status === 'on_track'
+                    ? 'text-[var(--color-green)]'
+                    : item.status === 'at_risk'
+                      ? 'text-[var(--color-soft-blue)]'
+                      : 'text-[var(--color-coral)]';
+
+                return (
+                  <tr key={item.id} className="border-b border-[var(--color-border)] last:border-0">
+                    <td className="px-4 py-3">
+                      <div className="text-[var(--color-white)]">{item.categoryName}</div>
+                      <div className="text-[11px] text-[var(--color-muted)]">{item.categoryPath}</div>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-[var(--color-muted)]">
+                      CAD {item.monthlyCad.toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-[var(--color-muted)]">
+                      CAD {item.budgetCad.toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-[var(--color-muted)]">
+                      CAD {item.actualCad.toFixed(2)}
+                    </td>
+                    <td
+                      className="px-4 py-3 font-mono"
+                      style={{
+                        color:
+                          item.remainingCad >= 0
+                            ? 'var(--color-green)'
+                            : 'var(--color-coral)',
+                      }}
+                    >
+                      CAD {item.remainingCad.toFixed(2)}
+                    </td>
+                    <td className={`px-4 py-3 text-xs uppercase tracking-wider ${statusClass}`}>
+                      {item.status.replace('_', ' ')} ({item.utilizationPct.toFixed(1)}%)
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const ok = window.confirm(
+                            `Delete budget for "${item.categoryName}"?`,
+                          );
+                          if (!ok) return;
+                          deleteBudget.mutate({ id: item.id });
+                        }}
+                        className="text-[var(--color-muted)] hover:text-[var(--color-coral)] transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

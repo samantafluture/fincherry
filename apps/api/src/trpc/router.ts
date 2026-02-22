@@ -8,6 +8,7 @@ import { goalsRouter } from './goals.js';
 import { analyticsRouter } from './analytics.js';
 import { aiRouter } from './ai.js';
 import { exchangeRatesRouter } from './exchangeRates.js';
+import { budgetsRouter } from './budgets.js';
 
 export const appRouter = router({
   auth: authRouter,
@@ -19,6 +20,7 @@ export const appRouter = router({
   analytics: analyticsRouter,
   ai: aiRouter,
   exchangeRates: exchangeRatesRouter,
+  budgets: budgetsRouter,
 });
 
 // Export type for frontend consumption — the ONLY import the web app needs

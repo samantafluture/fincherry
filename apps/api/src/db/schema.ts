@@ -154,6 +154,23 @@ export const aiReports = pgTable(
   (table) => [index('idx_ai_reports_month').on(table.reportMonth, table.createdAt)],
 );
 
+// ── Budgets ─────────────────────────────────────────────────────────────
+
+export const budgets = pgTable(
+  'budgets',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    categoryId: uuid('category_id')
+      .notNull()
+      .references(() => categories.id),
+    monthlyCad: decimal('monthly_cad', { precision: 12, scale: 2 }).notNull(),
+    isActive: boolean('is_active').default(true).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [unique('budgets_category_unique').on(table.categoryId)],
+);
+
 // ── Categorization Rules ────────────────────────────────────────────────
 
 export const categorizationRules = pgTable('categorization_rules', {
@@ -172,6 +189,7 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
   parent: one(categories, { fields: [categories.parentId], references: [categories.id] }),
   children: many(categories),
   transactions: many(transactions),
+  budgets: many(budgets),
   rules: many(categorizationRules),
 }));
 
@@ -206,6 +224,13 @@ export const uploadsRelations = relations(uploads, ({ one, many }) => ({
   transactions: many(transactions),
 }));
 
+export const budgetsRelations = relations(budgets, ({ one }) => ({
+  category: one(categories, {
+    fields: [budgets.categoryId],
+    references: [categories.id],
+  }),
+}));
+
 export const categorizationRulesRelations = relations(categorizationRules, ({ one }) => ({
   category: one(categories, {
     fields: [categorizationRules.categoryId],
@@ -228,3 +253,5 @@ export type ExchangeRate = typeof exchangeRates.$inferSelect;
 export type Upload = typeof uploads.$inferSelect;
 export type CategorizationRule = typeof categorizationRules.$inferSelect;
 export type AiReport = typeof aiReports.$inferSelect;
+export type Budget = typeof budgets.$inferSelect;
+export type NewBudget = typeof budgets.$inferInsert;

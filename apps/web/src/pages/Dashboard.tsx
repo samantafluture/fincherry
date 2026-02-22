@@ -104,6 +104,11 @@ export function DashboardPage() {
   const { data: incomeVsExpense } = trpc.analytics.incomeVsExpense.useQuery(analyticsInput);
   const { data: byCategory } = trpc.analytics.byCategory.useQuery(analyticsInput);
   const { data: trends } = trpc.analytics.trends.useQuery(analyticsInput);
+  const { data: budgetSummary } = trpc.budgets.summary.useQuery({
+    startDate,
+    endDate,
+    accountIds,
+  });
   const { data: recentTxs } = trpc.transactions.list.useQuery({
     limit: 8,
     sortBy: 'date',
@@ -441,6 +446,78 @@ export function DashboardPage() {
               </Card>
             ))}
       </div>
+
+      <Card>
+        <div className="flex items-center justify-between mb-3">
+          <SectionTitle>Budget vs Actual</SectionTitle>
+          <span className="text-[10px] text-[var(--color-muted)]">
+            {budgetSummary?.startDate} to {budgetSummary?.endDate}
+          </span>
+        </div>
+        {budgetSummary && budgetSummary.items.length > 0 ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-hover)] px-3 py-2">
+                <div className="text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
+                  Budget
+                </div>
+                <div className="text-sm font-mono text-[var(--color-white)]">
+                  {formatCAD(budgetSummary.totals.budgetCad)}
+                </div>
+              </div>
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-hover)] px-3 py-2">
+                <div className="text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
+                  Actual
+                </div>
+                <div className="text-sm font-mono text-[var(--color-white)]">
+                  {formatCAD(budgetSummary.totals.actualCad)}
+                </div>
+              </div>
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-hover)] px-3 py-2">
+                <div className="text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
+                  Utilization
+                </div>
+                <div
+                  className="text-sm font-mono"
+                  style={{
+                    color:
+                      budgetSummary.totals.utilizationPct <= 100 ? C.green : C.coral,
+                  }}
+                >
+                  {budgetSummary.totals.utilizationPct.toFixed(1)}%
+                </div>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              {budgetSummary.items.slice(0, 5).map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between rounded-lg px-2.5 py-1.5 bg-[var(--color-surface-hover)]"
+                >
+                  <div className="min-w-0">
+                    <div className="text-xs text-[var(--color-white)] truncate">
+                      {item.categoryName}
+                    </div>
+                    <div className="text-[10px] text-[var(--color-muted)] font-mono">
+                      {formatCAD(item.actualCad)} / {formatCAD(item.budgetCad)}
+                    </div>
+                  </div>
+                  <div
+                    className="text-xs font-semibold font-mono"
+                    style={{ color: item.utilizationPct <= 100 ? C.green : C.coral }}
+                  >
+                    {item.utilizationPct.toFixed(1)}%
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="h-24 flex items-center justify-center text-sm text-[var(--color-muted)]">
+            No budgets yet. Add budgets in Settings → Budgets.
+          </div>
+        )}
+      </Card>
 
       {/* Income vs Expenses chart */}
       <Card>

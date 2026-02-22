@@ -803,7 +803,15 @@ After a few months of data, add a background job that detects recurring patterns
 
 > **Phase 5 update (Feb 2026):** an on-demand recurring detector is available in Settings. It scans recent transactions for interval + amount consistency and flags matched rows as recurring. Background scheduling remains optional for later.
 
-### 5.6 Export
+### 5.6 Budget vs Actual Tracking
+
+- Set monthly CAD budgets by category (including parent categories).
+- Compare actual spending vs budget for any selected period.
+- Surface over-budget categories in dashboard summaries.
+
+> **Phase 5 update (Feb 2026):** budget CRUD and period-based budget-vs-actual summary are implemented (Settings + Dashboard).
+
+### 5.7 Export
 
 - **CSV export** of filtered transactions (for tax prep or manual analysis).
 - **Monthly PDF report** — summary of the month, auto-generated. (Nice-to-have, not essential.)

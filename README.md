@@ -130,6 +130,8 @@ Go to http://localhost:5173 — you'll see the login screen. Enter the passphras
 
 - `relation "categories" does not exist`:
   - Run `pnpm --filter @fincherry/api db:push`, then `pnpm db:seed`.
+- `relation "budgets" does not exist`:
+  - Run `pnpm --filter @fincherry/api db:push`, then restart `pnpm dev:api`.
 - `password authentication failed for user "fincherry"`:
   - Your DB container was initialized with a different password.
   - Run:
@@ -390,4 +392,6 @@ At login, enter the original plain passphrase you chose, not the hash string.
 - ✅ Done: Transactions page now supports CSV export using the current active filters (account/category/date/search), suitable for tax/manual analysis.
 - ✅ Done: Settings now has recurring-transaction detection (weekly/biweekly/monthly/quarterly pattern scan) and can auto-flag matched transactions.
 - ✅ Done: Backup/restore workflow is scripted (`pnpm db:backup`, `pnpm db:restore`) with optional cron installer (`pnpm db:backup:cron`).
+- ✅ Done: Budget vs actual tracking is available in Settings and summarized on Dashboard for selected periods.
 - ℹ️ CSV export currently caps at 10,000 rows per export to prevent accidental oversized downloads.
+- ⚠️ Required after pulling latest changes: run `pnpm db:push` (adds `budgets` table), then restart API.
