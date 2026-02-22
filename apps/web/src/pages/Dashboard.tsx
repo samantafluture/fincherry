@@ -8,6 +8,7 @@ import { trpc } from '@/lib/trpc';
 import { getDateRange, currentMonthLabel } from '@/lib/dateUtils';
 import { formatCAD } from '@/lib/formatCurrency';
 import { buildCategoryPathMap, buildGroupedCategoryOptions } from '@/lib/categoryPaths';
+import { ChartErrorBoundary } from '@/components/ui/ChartErrorBoundary';
 
 // ── Design tokens for charts ──────────────────────────────────────────
 const C = {
@@ -445,37 +446,43 @@ export function DashboardPage() {
       <Card>
         <SectionTitle>Income vs Expenses</SectionTitle>
         {incomeVsExpense && incomeVsExpense.length > 0 ? (
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart
-              data={incomeVsExpense}
-              barGap={3}
-              onClick={(state: { activePayload?: Array<{ payload?: { monthKey?: string } }> }) => {
-                const monthKey = state.activePayload?.[0]?.payload?.monthKey;
-                if (!monthKey) return;
-                const bounds = toMonthBounds(monthKey);
-                if (!bounds) return;
-                goToTransactions({
-                  startDate: bounds.start,
-                  endDate: bounds.end,
-                  accountIds: selectedAccountIds.length > 0 ? selectedAccountIds.join(',') : undefined,
-                  categoryIds: selectedCategoryIds.length > 0 ? selectedCategoryIds.join(',') : undefined,
-                });
-              }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-              <XAxis dataKey="month" tick={{ fill: C.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis
-                tick={{ fill: C.muted, fontSize: 10 }}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
-              />
-              <Tooltip {...tooltipStyle} formatter={(v: number) => [`$${v.toLocaleString()}`, undefined]} />
-              <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, color: C.muted }} />
-              <Bar dataKey="income" fill={C.green} radius={[5, 5, 0, 0]} name="Income" />
-              <Bar dataKey="expenses" fill={C.coral} radius={[5, 5, 0, 0]} name="Expenses" />
-            </BarChart>
-          </ResponsiveContainer>
+          <ChartErrorBoundary
+            fallbackHeight={200}
+            label="Income vs expenses chart"
+            resetKey={`${startDate}:${endDate}:${selectedAccountIds.join(',')}:${selectedCategoryIds.join(',')}`}
+          >
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart
+                data={incomeVsExpense}
+                barGap={3}
+                onClick={(state: { activePayload?: Array<{ payload?: { monthKey?: string } }> }) => {
+                  const monthKey = state.activePayload?.[0]?.payload?.monthKey;
+                  if (!monthKey) return;
+                  const bounds = toMonthBounds(monthKey);
+                  if (!bounds) return;
+                  goToTransactions({
+                    startDate: bounds.start,
+                    endDate: bounds.end,
+                    accountIds: selectedAccountIds.length > 0 ? selectedAccountIds.join(',') : undefined,
+                    categoryIds: selectedCategoryIds.length > 0 ? selectedCategoryIds.join(',') : undefined,
+                  });
+                }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                <XAxis dataKey="month" tick={{ fill: C.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis
+                  tick={{ fill: C.muted, fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
+                />
+                <Tooltip {...tooltipStyle} formatter={(v: number) => [`$${v.toLocaleString()}`, undefined]} />
+                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, color: C.muted }} />
+                <Bar dataKey="income" fill={C.green} radius={[5, 5, 0, 0]} name="Income" />
+                <Bar dataKey="expenses" fill={C.coral} radius={[5, 5, 0, 0]} name="Expenses" />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartErrorBoundary>
         ) : (
           <div className="h-[200px] flex items-center justify-center text-sm text-[var(--color-muted)]">
             No data yet — upload a bank statement to get started
@@ -486,30 +493,36 @@ export function DashboardPage() {
       <Card>
         <SectionTitle>Category Trends</SectionTitle>
         {trends && trends.length > 0 && trendKeys.length > 0 ? (
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={trends}>
-              <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-              <XAxis dataKey="month" tick={{ fill: C.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis
-                tick={{ fill: C.muted, fontSize: 10 }}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(v: number) => `$${Math.round(v)}`}
-              />
-              <Tooltip {...tooltipStyle} formatter={(v: number) => [formatCAD(v), undefined]} />
-              <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, color: C.muted }} />
-              {trendKeys.map((key, idx) => (
-                <Line
-                  key={key}
-                  type="monotone"
-                  dataKey={key}
-                  stroke={trendPalette[idx % trendPalette.length]}
-                  strokeWidth={2}
-                  dot={false}
+          <ChartErrorBoundary
+            fallbackHeight={220}
+            label="Category trends chart"
+            resetKey={`${startDate}:${endDate}:${trendKeys.join('|')}`}
+          >
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={trends}>
+                <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                <XAxis dataKey="month" tick={{ fill: C.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis
+                  tick={{ fill: C.muted, fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v: number) => `$${Math.round(v)}`}
                 />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
+                <Tooltip {...tooltipStyle} formatter={(v: number) => [formatCAD(v), undefined]} />
+                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, color: C.muted }} />
+                {trendKeys.map((key, idx) => (
+                  <Line
+                    key={key}
+                    type="monotone"
+                    dataKey={key}
+                    stroke={trendPalette[idx % trendPalette.length]}
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </ChartErrorBoundary>
         ) : (
           <div className="h-[220px] flex items-center justify-center text-sm text-[var(--color-muted)]">
             Not enough trend data yet
@@ -525,36 +538,42 @@ export function DashboardPage() {
           {byCategory && byCategory.length > 0 ? (
             <div className="space-y-3">
               <div className="mx-auto w-full max-w-[220px]">
-                <ResponsiveContainer width="100%" height={150}>
-                  <PieChart>
-                    <Pie
-                      data={byCategory}
-                      dataKey="amount"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={40}
-                      outerRadius={62}
-                      strokeWidth={0}
-                      onClick={(entry: { categoryId?: string | null }) => {
-                        if (!entry?.categoryId) return;
-                        goToTransactions({
-                          categoryId: entry.categoryId,
-                          accountIds: selectedAccountIds.length > 0 ? selectedAccountIds.join(',') : undefined,
-                          startDate,
-                          endDate,
-                        });
-                      }}
-                    >
-                      {byCategory.map((c, i) => (
-                        <Cell key={i} fill={c.color ?? C.muted} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      {...tooltipStyle}
-                      formatter={(v: number, label) => [formatCAD(v), String(label ?? '')]}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+                <ChartErrorBoundary
+                  fallbackHeight={150}
+                  label="Category breakdown chart"
+                  resetKey={`${startDate}:${endDate}:${byCategory.length}`}
+                >
+                  <ResponsiveContainer width="100%" height={150}>
+                    <PieChart>
+                      <Pie
+                        data={byCategory}
+                        dataKey="amount"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={40}
+                        outerRadius={62}
+                        strokeWidth={0}
+                        onClick={(entry: { categoryId?: string | null }) => {
+                          if (!entry?.categoryId) return;
+                          goToTransactions({
+                            categoryId: entry.categoryId,
+                            accountIds: selectedAccountIds.length > 0 ? selectedAccountIds.join(',') : undefined,
+                            startDate,
+                            endDate,
+                          });
+                        }}
+                      >
+                        {byCategory.map((c, i) => (
+                          <Cell key={i} fill={c.color ?? C.muted} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        {...tooltipStyle}
+                        formatter={(v: number, label) => [formatCAD(v), String(label ?? '')]}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </ChartErrorBoundary>
               </div>
               <div className="grid grid-cols-1 gap-1.5">
                 {byCategory.slice(0, 6).map((c) => (
