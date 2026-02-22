@@ -139,6 +139,21 @@ export const aiCache = pgTable('ai_cache', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const aiReports = pgTable(
+  'ai_reports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    reportMonth: date('report_month').notNull(), // first day of month
+    periodStart: date('period_start').notNull(),
+    periodEnd: date('period_end').notNull(),
+    prompt: text('prompt').notNull(),
+    response: text('response').notNull(), // JSON string
+    provider: varchar('provider', { length: 40 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('idx_ai_reports_month').on(table.reportMonth, table.createdAt)],
+);
+
 // ── Categorization Rules ────────────────────────────────────────────────
 
 export const categorizationRules = pgTable('categorization_rules', {
@@ -212,3 +227,4 @@ export type GoalSnapshot = typeof goalSnapshots.$inferSelect;
 export type ExchangeRate = typeof exchangeRates.$inferSelect;
 export type Upload = typeof uploads.$inferSelect;
 export type CategorizationRule = typeof categorizationRules.$inferSelect;
+export type AiReport = typeof aiReports.$inferSelect;

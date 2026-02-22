@@ -1,15 +1,25 @@
 import { z } from 'zod';
-import { and, gte, inArray, lte } from 'drizzle-orm';
+import { and, desc, gte, inArray, lte } from 'drizzle-orm';
+import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from './trpc.js';
 import { db } from '../db/index.js';
-import { transactions } from '../db/schema.js';
+import { aiReports, transactions } from '../db/schema.js';
 import { stripPII } from '../services/piiStripper.js';
-import { generateInsights, categorizeTransactions } from '../services/claude.js';
+import {
+  askFinanceQuestionWithOptions,
+  categorizeTransactions,
+  generateInsightsWithOptions,
+  type PeriodSummary,
+} from '../services/aiProvider.js';
 
 const dateRangeSchema = z.object({
   startDate: z.string(),
   endDate: z.string(),
 });
+
+const monthSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}$/, 'Expected month format YYYY-MM');
 
 type SnapshotSource = 'transfer' | 'statement' | 'manual';
 
@@ -31,6 +41,81 @@ function monthsBetween(startIsoDate: string, endIsoDate: string): number {
   const ms = end.getTime() - start.getTime();
   if (ms <= 0) return 0;
   return ms / (1000 * 60 * 60 * 24 * 30.4375);
+}
+
+function isInternalMovementCategory(name: string | null | undefined): boolean {
+  return /(transfer|credit card payment|bill payment|payment received)/i.test(name ?? '');
+}
+
+function getMonthDateRange(month: string): { startDate: string; endDate: string } {
+  const [yearRaw, monthRaw] = month.split('-');
+  const year = Number(yearRaw);
+  const monthNumber = Number(monthRaw);
+  const start = new Date(Date.UTC(year, monthNumber - 1, 1));
+  const end = new Date(Date.UTC(year, monthNumber, 0));
+  const toIsoDate = (d: Date) => d.toISOString().split('T')[0]!;
+  return { startDate: toIsoDate(start), endDate: toIsoDate(end) };
+}
+
+function buildPeriodSummary(
+  rows: Array<{
+    date: string;
+    amountCad: string;
+    category: { name: string } | null;
+  }>,
+  input: { label: string; startDate: string; endDate: string },
+): PeriodSummary {
+  let totalIncome = 0;
+  let operatingExpenses = 0;
+  let internalMovements = 0;
+  const categoryTotals = new Map<string, number>();
+  const monthlyNet = new Map<string, number>();
+
+  for (const row of rows) {
+    const amountCad = Number(row.amountCad);
+    const month = row.date.slice(0, 7);
+    monthlyNet.set(month, (monthlyNet.get(month) ?? 0) + amountCad);
+
+    if (amountCad > 0) {
+      totalIncome += amountCad;
+      continue;
+    }
+
+    const magnitude = Math.abs(amountCad);
+    if (isInternalMovementCategory(row.category?.name)) {
+      internalMovements += magnitude;
+      continue;
+    }
+
+    operatingExpenses += magnitude;
+    const categoryName = row.category?.name ?? 'Uncategorized';
+    categoryTotals.set(categoryName, (categoryTotals.get(categoryName) ?? 0) + magnitude);
+  }
+
+  const topExpenseCategories = Array.from(categoryTotals.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([name, amount]) => ({
+      name,
+      amount: Math.round(amount * 100) / 100,
+      sharePct:
+        operatingExpenses > 0 ? Math.round((amount / operatingExpenses) * 1000) / 10 : 0,
+    }));
+
+  return {
+    label: input.label,
+    startDate: input.startDate,
+    endDate: input.endDate,
+    transactionCount: rows.length,
+    totalIncome: Math.round(totalIncome * 100) / 100,
+    operatingExpenses: Math.round(operatingExpenses * 100) / 100,
+    internalMovements: Math.round(internalMovements * 100) / 100,
+    operatingNet: Math.round((totalIncome - operatingExpenses) * 100) / 100,
+    topExpenseCategories,
+    monthlyNet: Array.from(monthlyNet.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([month, net]) => ({ month, net: Math.round(net * 100) / 100 })),
+  };
 }
 
 async function expandCategoryFilterIds(categoryIds: string[]): Promise<string[]> {
@@ -64,7 +149,14 @@ async function expandCategoryFilterIds(categoryIds: string[]): Promise<string[]>
 }
 
 export const aiRouter = router({
-  insights: protectedProcedure.input(dateRangeSchema).mutation(async ({ input }) => {
+  insights: protectedProcedure
+    .input(
+      dateRangeSchema.extend({
+        refresh: z.boolean().optional(),
+        variationToken: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
     const rows = await db.query.transactions.findMany({
       where: and(
         gte(transactions.date, input.startDate),
@@ -74,8 +166,65 @@ export const aiRouter = router({
     });
 
     const anonymized = stripPII(rows);
-    return generateInsights(anonymized);
-  }),
+      return generateInsightsWithOptions(anonymized, {
+        bypassCache: input.refresh === true,
+        variationToken: input.variationToken,
+      });
+    }),
+
+  ask: protectedProcedure
+    .input(
+      dateRangeSchema.extend({
+        question: z.string().min(3).max(800),
+        compareStartDate: z.string().optional(),
+        compareEndDate: z.string().optional(),
+        refresh: z.boolean().optional(),
+        variationToken: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const primaryRows = await db.query.transactions.findMany({
+        where: and(
+          gte(transactions.date, input.startDate),
+          lte(transactions.date, input.endDate),
+        ),
+        with: { category: true },
+      });
+
+      const primary = buildPeriodSummary(primaryRows, {
+        label: 'Primary period',
+        startDate: input.startDate,
+        endDate: input.endDate,
+      });
+
+      let comparison: PeriodSummary | undefined;
+      if (input.compareStartDate && input.compareEndDate) {
+        const comparisonRows = await db.query.transactions.findMany({
+          where: and(
+            gte(transactions.date, input.compareStartDate),
+            lte(transactions.date, input.compareEndDate),
+          ),
+          with: { category: true },
+        });
+        comparison = buildPeriodSummary(comparisonRows, {
+          label: 'Comparison period',
+          startDate: input.compareStartDate,
+          endDate: input.compareEndDate,
+        });
+      }
+
+      return askFinanceQuestionWithOptions(
+        {
+          question: input.question,
+          primary,
+          comparison,
+        },
+        {
+          bypassCache: input.refresh === true,
+          variationToken: input.variationToken,
+        },
+      );
+    }),
 
   categorize: protectedProcedure
     .input(z.object({ descriptions: z.array(z.string()).min(1).max(50) }))
@@ -132,6 +281,106 @@ export const aiRouter = router({
         monthlySavings: Math.round(monthlySavings * 100) / 100,
         yearlySavings: Math.round(monthlySavings * 12 * 100) / 100,
       };
+    }),
+
+  monthlyReportGenerate: protectedProcedure
+    .input(
+      z.object({
+        month: monthSchema,
+        refresh: z.boolean().optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const { startDate, endDate } = getMonthDateRange(input.month);
+      const rows = await db.query.transactions.findMany({
+        where: and(gte(transactions.date, startDate), lte(transactions.date, endDate)),
+        with: { category: true, account: true },
+      });
+
+      const anonymized = stripPII(rows);
+      const insights = await generateInsightsWithOptions(anonymized, {
+        bypassCache: input.refresh === true,
+        variationToken:
+          input.refresh === true ? `monthly-${input.month}-${Date.now()}` : undefined,
+      });
+
+      let saved:
+        | {
+            id: string;
+          }
+        | undefined;
+      try {
+        [saved] = await db
+          .insert(aiReports)
+          .values({
+            reportMonth: `${input.month}-01`,
+            periodStart: startDate,
+            periodEnd: endDate,
+            prompt: 'Monthly AI summary',
+            response: JSON.stringify(insights),
+            provider: insights.meta.provider,
+          })
+          .returning({ id: aiReports.id });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Failed to save monthly report';
+        if (message.toLowerCase().includes('ai_reports')) {
+          throw new TRPCError({
+            code: 'PRECONDITION_FAILED',
+            message:
+              'Monthly reports table is missing. Run `pnpm db:push` and restart the API.',
+          });
+        }
+        throw error;
+      }
+
+      return {
+        reportId: saved!.id,
+        month: input.month,
+        insights,
+      };
+    }),
+
+  monthlyReports: protectedProcedure
+    .input(
+      z.object({
+        limit: z.number().int().min(1).max(24).default(6),
+      }),
+    )
+    .query(async ({ input }) => {
+      let rows: Array<typeof aiReports.$inferSelect> = [];
+      try {
+        rows = await db
+          .select()
+          .from(aiReports)
+          .orderBy(desc(aiReports.createdAt))
+          .limit(input.limit);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Failed to load monthly reports';
+        if (message.toLowerCase().includes('ai_reports')) {
+          return [];
+        }
+        throw error;
+      }
+
+      return rows.map((row) => {
+        let parsed: unknown = null;
+        try {
+          parsed = JSON.parse(row.response);
+        } catch {
+          parsed = null;
+        }
+        return {
+          id: row.id,
+          reportMonth: row.reportMonth,
+          periodStart: row.periodStart,
+          periodEnd: row.periodEnd,
+          provider: row.provider,
+          createdAt: row.createdAt,
+          response: parsed,
+        };
+      });
     }),
 
   predict: protectedProcedure

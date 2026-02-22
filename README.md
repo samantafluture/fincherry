@@ -61,8 +61,8 @@ PORT=3000
 
 # Optional (AI features only)
 GEMINI_API_KEY=
-GEMINI_INSIGHTS_MODEL=gemini-2.0-flash
-GEMINI_CATEGORIZATION_MODEL=gemini-2.0-flash
+GEMINI_INSIGHTS_MODEL=gemini-2.5-flash
+GEMINI_CATEGORIZATION_MODEL=gemini-2.5-flash
 ```
 
 Generate `AUTH_PASSPHRASE_HASH` with:
@@ -167,8 +167,8 @@ DB_PASSWORD=change-me-strong-password
 JWT_SECRET=dev-secret-change-this-in-production-32chars
 AUTH_PASSPHRASE_HASH='$2b$12$...'  # generate with bcryptjs (see Option A step 1)
 GEMINI_API_KEY=your-gemini-api-key   # optional
-GEMINI_INSIGHTS_MODEL=gemini-2.0-flash
-GEMINI_CATEGORIZATION_MODEL=gemini-2.0-flash
+GEMINI_INSIGHTS_MODEL=gemini-2.5-flash
+GEMINI_CATEGORIZATION_MODEL=gemini-2.5-flash
 NODE_ENV=production
 PORT=3000
 EOF
