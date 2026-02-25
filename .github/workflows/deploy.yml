@@ -1,0 +1,57 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: Type-check & build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check API
+        run: pnpm --filter api exec tsc --noEmit
+
+      - name: Type-check web
+        run: pnpm --filter web exec tsc --noEmit
+
+      - name: Build web (Vite)
+        run: pnpm --filter web build
+
+      - name: Check web bundle budgets
+        run: pnpm web:bundle:check
+
+  deploy:
+    name: Deploy to VPS
+    needs: ci
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 187.124.67.117
+          username: sam
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd ~/apps/fincherry
+            bash scripts/deploy.sh

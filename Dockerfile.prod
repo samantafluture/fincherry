@@ -1,0 +1,40 @@
+# ── Base: install pnpm + workspace deps ─────────────────────────────────
+FROM node:20-alpine AS base
+WORKDIR /app
+RUN npm install -g pnpm
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+
+RUN pnpm install --frozen-lockfile
+
+# ── Web build: Vite SPA ─────────────────────────────────────────────────
+FROM base AS web-build
+COPY apps/web/ apps/web/
+COPY apps/api/src/ apps/api/src/
+COPY apps/api/tsconfig.json apps/api/
+RUN pnpm --filter web build
+
+# ── API build: TypeScript compile ────────────────────────────────────────
+FROM base AS api-build
+COPY apps/api/ apps/api/
+RUN pnpm --filter @fincherry/api build
+
+# ── API production image ─────────────────────────────────────────────────
+FROM node:20-alpine AS api
+WORKDIR /app
+
+COPY --from=api-build /app/apps/api/dist ./dist
+COPY --from=api-build /app/apps/api/package.json ./
+COPY --from=api-build /app/node_modules ./node_modules
+
+RUN mkdir -p /app/uploads
+
+EXPOSE 3000
+CMD ["node", "dist/server.js"]
+
+# ── Migrate: drizzle-kit push ────────────────────────────────────────────
+FROM base AS migrate
+COPY apps/api/ apps/api/
+CMD ["pnpm", "--filter", "@fincherry/api", "db:push"]

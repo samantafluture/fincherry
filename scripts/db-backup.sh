@@ -10,6 +10,7 @@ fi
 
 BACKUP_DIR="${1:-$ROOT_DIR/backups}"
 RETENTION_DAYS="${FINCHERRY_BACKUP_RETENTION_DAYS:-}"
+DB_CONTAINER="${FINCHERRY_DB_CONTAINER:-}"
 
 mkdir -p "$BACKUP_DIR"
 
@@ -17,7 +18,11 @@ timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 backup_file="$BACKUP_DIR/fincherry_${timestamp}.dump"
 
 echo "Creating PostgreSQL backup: $backup_file"
-docker compose exec -T db pg_dump -Fc -U fincherry fincherry > "$backup_file"
+if [[ -n "$DB_CONTAINER" ]]; then
+  docker exec "$DB_CONTAINER" pg_dump -Fc -U fincherry fincherry > "$backup_file"
+else
+  docker compose exec -T db pg_dump -Fc -U fincherry fincherry > "$backup_file"
+fi
 
 if [[ ! -s "$backup_file" ]]; then
   echo "Backup failed: file is empty."
