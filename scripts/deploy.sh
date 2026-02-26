@@ -25,7 +25,7 @@ docker exec infra-nginx nginx -s reload
 
 echo "==> Health check (waiting up to 30s)"
 for i in $(seq 1 10); do
-  if docker exec fincherry-api wget -qO- http://localhost:3000/api/health > /dev/null 2>&1; then
+  if docker exec fincherry-api wget -qO- http://127.0.0.1:3000/api/health > /dev/null 2>&1; then
     echo "    API is healthy"
     break
   fi
