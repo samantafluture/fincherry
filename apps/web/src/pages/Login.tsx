@@ -7,8 +7,12 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
+  const utils = trpc.useUtils();
   const login = trpc.auth.login.useMutation({
-    onSuccess: () => navigate('/'),
+    onSuccess: async () => {
+      await utils.auth.verify.reset();
+      navigate('/');
+    },
     onError: (err) => setError(err.message),
   });
 

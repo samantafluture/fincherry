@@ -23,14 +23,18 @@ docker compose -f docker-compose.prod.yml up -d api
 echo "==> Reloading nginx"
 docker exec infra-nginx nginx -s reload
 
-echo "==> Health check"
-sleep 3
-if docker exec fincherry-api wget -qO- http://localhost:3000/api/health > /dev/null 2>&1; then
-  echo "    API is healthy"
-else
-  echo "    WARNING: Health check failed — check logs with: docker logs fincherry-api"
-  exit 1
-fi
+echo "==> Health check (waiting up to 30s)"
+for i in $(seq 1 10); do
+  if docker exec fincherry-api wget -qO- http://localhost:3000/api/health > /dev/null 2>&1; then
+    echo "    API is healthy"
+    break
+  fi
+  if [ "$i" -eq 10 ]; then
+    echo "    WARNING: Health check failed — check logs with: docker logs fincherry-api"
+    exit 1
+  fi
+  sleep 3
+done
 
 echo "==> Cleaning up dangling images"
 docker image prune -f
