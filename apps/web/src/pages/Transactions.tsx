@@ -686,9 +686,109 @@ export function TransactionsPage() {
             No transactions found. Upload a PDF statement to get started.
           </div>
         ) : (
+          <>
+          {/* Mobile card list */}
+          <div className="md:hidden divide-y divide-[var(--color-border)]">
+            {visibleRows.map((tx) => (
+              <div key={tx.id} className="px-4 py-3 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs leading-relaxed text-[var(--color-white)] break-words [overflow-wrap:anywhere]">
+                      {tx.description}
+                    </p>
+                    <p className="text-[11px] text-[var(--color-muted)] font-mono mt-0.5">
+                      {tx.date}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div
+                      className="font-mono font-semibold text-sm"
+                      style={{ color: Number(tx.amountCad) > 0 ? '#2DD4A0' : 'var(--color-white)' }}
+                    >
+                      {Number(tx.amountCad) > 0 ? '+' : ''}
+                      {formatCAD(tx.amountCad)}
+                    </div>
+                    {tx.currency !== 'CAD' && (
+                      <div className="text-[10px] text-[var(--color-soft-blue)] font-mono">
+                        {currencySymbol[tx.currency as keyof typeof currencySymbol] ?? ''}{Math.abs(Number(tx.amount)).toFixed(2)} {tx.currency}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] uppercase tracking-wider text-[var(--color-muted)] shrink-0">
+                    {tx.account?.name}
+                  </span>
+                  <select
+                    value={tx.categoryId ?? ''}
+                    onChange={(e) => {
+                      const categoryId = e.target.value;
+                      if (!categoryId || categoryId === tx.categoryId) return;
+                      updateTx.mutate({ id: tx.id, categoryId });
+                    }}
+                    className="flex-1 min-w-0 bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-lg px-2 py-1 text-[11px] text-[var(--color-white)] focus:outline-none focus:ring-1 focus:ring-[var(--color-cherry-pink)]"
+                  >
+                    <option value="">
+                      {tx.categoryId
+                        ? formatPathForDisplay(
+                            categoryPathById.get(tx.categoryId) ??
+                              tx.category?.name ??
+                              'Uncategorized',
+                          )
+                        : 'Uncategorized'}
+                    </option>
+                    {groupedCategoryOptions.map((group) => (
+                      <optgroup key={group.label} label={group.label}>
+                        {group.options.map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex justify-end gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openEditDialog({
+                        id: tx.id,
+                        date: tx.date,
+                        description: tx.description,
+                        amount: tx.amount,
+                        currency: tx.currency,
+                        accountId: tx.accountId,
+                        categoryId: tx.categoryId ?? null,
+                      })
+                    }
+                    className="px-2.5 py-1 rounded-md text-[11px] bg-[var(--color-surface-hover)] text-[var(--color-soft-blue)] hover:text-[var(--color-white)]"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    disabled={deletingTx}
+                    onClick={() => {
+                      const ok = window.confirm(
+                        'Delete this transaction? This cannot be undone.',
+                      );
+                      if (!ok) return;
+                      deleteTx.mutate({ id: tx.id });
+                    }}
+                    className="px-2.5 py-1 rounded-md text-[11px] bg-[var(--color-surface-hover)] text-[var(--color-coral)] hover:text-[var(--color-white)] disabled:opacity-50"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop table */}
           <div
             ref={tableViewportRef}
-            className={shouldVirtualizeRows ? 'max-h-[68vh] overflow-y-auto' : ''}
+            className={`hidden md:block${shouldVirtualizeRows ? ' max-h-[68vh] overflow-y-auto' : ''}`}
             onScroll={
               shouldVirtualizeRows
                 ? (event) => setScrollTop((event.currentTarget as HTMLDivElement).scrollTop)
@@ -834,6 +934,7 @@ export function TransactionsPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
 
         {/* Pagination */}
