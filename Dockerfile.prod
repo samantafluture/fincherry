@@ -24,15 +24,25 @@ RUN pnpm --filter @fincherry/api build
 # ── API production image ─────────────────────────────────────────────────
 FROM node:20-alpine AS api
 WORKDIR /app
+RUN npm install -g pnpm
 
-COPY --from=api-build /app/apps/api/dist ./dist
-COPY --from=api-build /app/apps/api/package.json ./
-COPY --from=api-build /app/node_modules ./node_modules
+# Copy workspace structure needed for pnpm to resolve deps
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY --from=api-build /app/apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
 
-RUN mkdir -p /app/uploads
+# Install production deps only — pnpm needs the full workspace context
+RUN pnpm install --frozen-lockfile --prod
+
+# Copy compiled API
+COPY --from=api-build /app/apps/api/dist apps/api/dist
+
+RUN mkdir -p /app/apps/api/uploads
+WORKDIR /app/apps/api
 
 EXPOSE 3000
 CMD ["node", "dist/server.js"]
+
 
 # ── Migrate: drizzle-kit push ────────────────────────────────────────────
 FROM base AS migrate

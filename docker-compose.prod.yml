@@ -16,7 +16,7 @@ services:
       GEMINI_INSIGHTS_MODEL: ${GEMINI_INSIGHTS_MODEL:-gemini-2.5-flash}
       GEMINI_CATEGORIZATION_MODEL: ${GEMINI_CATEGORIZATION_MODEL:-gemini-2.5-flash}
     volumes:
-      - uploads:/app/uploads
+      - uploads:/app/apps/api/uploads
     networks:
       - infra-net
 
