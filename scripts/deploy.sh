@@ -30,7 +30,8 @@ for i in $(seq 1 10); do
     break
   fi
   if [ "$i" -eq 10 ]; then
-    echo "    WARNING: Health check failed — check logs with: docker logs fincherry-api"
+    echo "    WARNING: Health check failed. Container logs:"
+    docker logs fincherry-api --tail 50
     exit 1
   fi
   sleep 3
