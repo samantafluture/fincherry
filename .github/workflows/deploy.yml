@@ -54,4 +54,5 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             cd ~/apps/fincherry
+            git pull origin main
             bash scripts/deploy.sh
