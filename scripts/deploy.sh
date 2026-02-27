@@ -12,10 +12,10 @@ echo "==> Building Docker images"
 docker compose -f docker-compose.prod.yml build
 
 echo "==> Deploying web assets to nginx volume"
-docker compose -f docker-compose.prod.yml run --rm web-assets
+docker compose -f docker-compose.prod.yml run --rm --build web-assets
 
 echo "==> Running database migrations"
-docker compose -f docker-compose.prod.yml run --rm migrate
+docker compose -f docker-compose.prod.yml run --rm --build migrate
 
 echo "==> Restarting API"
 docker compose -f docker-compose.prod.yml up -d api
