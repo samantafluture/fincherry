@@ -788,7 +788,7 @@ export function TransactionsPage() {
           {/* Desktop table */}
           <div
             ref={tableViewportRef}
-            className={`hidden lg:block${shouldVirtualizeRows ? ' max-h-[68vh] overflow-y-auto' : ''}`}
+            className={`lg:block${shouldVirtualizeRows ? ' max-h-[68vh] overflow-y-auto' : ''}`}
             onScroll={
               shouldVirtualizeRows
                 ? (event) => setScrollTop((event.currentTarget as HTMLDivElement).scrollTop)
