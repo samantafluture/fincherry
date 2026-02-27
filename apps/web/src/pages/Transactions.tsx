@@ -688,7 +688,7 @@ export function TransactionsPage() {
         ) : (
           <>
           {/* Mobile card list */}
-          <div className="md:hidden divide-y divide-[var(--color-border)]">
+          <div className="block lg:hidden divide-y divide-[var(--color-border)]">
             {visibleRows.map((tx) => (
               <div key={tx.id} className="px-4 py-3 space-y-2">
                 <div className="flex items-start justify-between gap-3">
@@ -788,7 +788,7 @@ export function TransactionsPage() {
           {/* Desktop table */}
           <div
             ref={tableViewportRef}
-            className={`hidden md:block${shouldVirtualizeRows ? ' max-h-[68vh] overflow-y-auto' : ''}`}
+            className={`hidden lg:block${shouldVirtualizeRows ? ' max-h-[68vh] overflow-y-auto' : ''}`}
             onScroll={
               shouldVirtualizeRows
                 ? (event) => setScrollTop((event.currentTarget as HTMLDivElement).scrollTop)
