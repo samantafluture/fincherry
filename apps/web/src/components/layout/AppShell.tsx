@@ -46,9 +46,9 @@ export function AppShell() {
       >
         {/* Logo */}
         <div className="px-6 py-5 border-b border-[var(--color-border)]">
-          <span className="text-lg font-semibold tracking-tight text-[var(--color-white)]">
+          <NavLink to="/" className="text-lg font-semibold tracking-tight text-[var(--color-white)]">
             Fin<span className="text-[var(--color-cherry-pink)]">Cherry</span>
-          </span>
+          </NavLink>
         </div>
 
         {/* Nav links */}
@@ -120,9 +120,9 @@ export function AppShell() {
 
         {/* Mobile header */}
         <header className="lg:hidden glass sticky top-0 z-10 flex items-center justify-between px-5 py-3 border-b border-[var(--color-border)]">
-          <span className="text-base font-semibold text-[var(--color-white)]">
+          <NavLink to="/" className="text-base font-semibold text-[var(--color-white)]">
             Fin<span className="text-[var(--color-cherry-pink)]">Cherry</span>
-          </span>
+          </NavLink>
           <NavLink
             to="/settings"
             className="text-[var(--color-muted)] hover:text-[var(--color-white)] transition-colors"
