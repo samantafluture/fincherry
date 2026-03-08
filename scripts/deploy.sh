@@ -8,8 +8,9 @@ cd "$PROJECT_DIR"
 echo "==> Pulling latest changes"
 git pull origin main
 
-echo "==> Building Docker images"
-docker compose -f docker-compose.prod.yml build
+echo "==> Building Docker images..."
+docker compose -f docker-compose.prod.yml build api
+docker compose -f docker-compose.prod.yml build web-assets
 
 echo "==> Deploying web assets to nginx volume"
 docker compose -f docker-compose.prod.yml run --rm --build web-assets
@@ -18,7 +19,8 @@ echo "==> Running database migrations"
 docker compose -f docker-compose.prod.yml run --rm --build migrate
 
 echo "==> Restarting API"
-docker compose -f docker-compose.prod.yml up -d api
+docker compose -f docker-compose.prod.yml down api --remove-orphans
+docker compose -f docker-compose.prod.yml up -d --force-recreate api
 
 echo "==> Reloading nginx"
 docker exec infra-nginx nginx -s reload
