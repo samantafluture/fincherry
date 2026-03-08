@@ -8,6 +8,7 @@ import {
   Sparkles,
   Settings,
   PanelLeft,
+  LogOut,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -19,10 +20,11 @@ const NAV_ITEMS: Array<{
   icon: LucideIcon;
   label: string;
   end: boolean;
+  adminOnly?: boolean;
 }> = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { to: '/transactions', icon: ArrowLeftRight, label: 'Transactions', end: false },
-  { to: '/upload', icon: Upload, label: 'Upload', end: false },
+  { to: '/upload', icon: Upload, label: 'Upload', end: false, adminOnly: true },
   { to: '/goals', icon: Target, label: 'Goals', end: false },
   { to: '/ai', icon: Sparkles, label: 'AI', end: false },
 ];
@@ -35,6 +37,8 @@ export function AppShell() {
   const logout = trpc.auth.logout.useMutation({
     onSuccess: () => navigate('/login'),
   });
+  const isAdmin = role === 'admin';
+  const visibleNavItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
   const isTransactionsView = location.pathname.startsWith('/transactions');
 
   return (
@@ -62,7 +66,7 @@ export function AppShell() {
 
         {/* Nav links */}
         <nav className="flex-1 px-3 py-4 space-y-1">
-          {NAV_ITEMS.map(({ to, icon: Icon, label, end }) => (
+          {visibleNavItems.map(({ to, icon: Icon, label, end }) => (
             <NavLink
               key={to}
               to={to}
@@ -139,12 +143,21 @@ export function AppShell() {
               </span>
             )}
           </div>
-          <NavLink
-            to="/settings"
-            className="text-[var(--color-muted)] hover:text-[var(--color-white)] transition-colors"
-          >
-            <Settings size={18} />
-          </NavLink>
+          <div className="flex items-center gap-3">
+            <NavLink
+              to="/settings"
+              className="text-[var(--color-muted)] hover:text-[var(--color-white)] transition-colors"
+            >
+              <Settings size={18} />
+            </NavLink>
+            <button
+              onClick={() => logout.mutate()}
+              className="text-[var(--color-muted)] hover:text-[var(--color-white)] transition-colors"
+              title="Sign out"
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
         </header>
 
         {/* Page content */}
@@ -163,7 +176,7 @@ export function AppShell() {
 
         {/* ── Mobile Bottom Nav ─────────────────────────────────────────── */}
         <nav className="lg:hidden fixed bottom-0 inset-x-0 z-20 glass border-t border-[var(--color-border)] flex justify-around items-center py-2 pb-safe">
-          {NAV_ITEMS.map(({ to, icon: Icon, label, end }) => (
+          {visibleNavItems.map(({ to, icon: Icon, label, end }) => (
             <NavLink
               key={to}
               to={to}
