@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
+import { useIsAdmin } from '@/hooks/useRole';
 import {
   ACTIVE_CATEGORY_ROOTS,
   buildCategoryPathMap,
@@ -51,6 +52,7 @@ export function SettingsPage() {
 }
 
 function AccountsSettings() {
+  const isAdmin = useIsAdmin();
   const { data: accounts, refetch } = trpc.accounts.list.useQuery();
   const deleteAccount = trpc.accounts.delete.useMutation({ onSuccess: () => refetch() });
 
@@ -79,14 +81,16 @@ function AccountsSettings() {
               <td className="px-4 py-3 text-[var(--color-muted)] text-xs font-mono">
                 {((a as { currentBalanceNative?: number }).currentBalanceNative ?? 0).toFixed(2)}
               </td>
-              <td className="px-4 py-3 text-right">
-                <button
-                  onClick={() => deleteAccount.mutate({ id: a.id })}
-                  className="text-[var(--color-muted)] hover:text-[var(--color-coral)] transition-colors"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </td>
+              {isAdmin && (
+                <td className="px-4 py-3 text-right">
+                  <button
+                    onClick={() => deleteAccount.mutate({ id: a.id })}
+                    className="text-[var(--color-muted)] hover:text-[var(--color-coral)] transition-colors"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -96,6 +100,7 @@ function AccountsSettings() {
 }
 
 function CategoriesSettings() {
+  const isAdmin = useIsAdmin();
   const utils = trpc.useUtils();
   const { data: categories } = trpc.categories.list.useQuery();
   const createCategory = trpc.categories.create.useMutation({
@@ -255,7 +260,7 @@ function CategoriesSettings() {
               {categoryPathById.get(node.id)}
             </div>
           </div>
-          {!isRoot && !isEditing && (
+          {isAdmin && !isRoot && !isEditing && (
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
@@ -338,50 +343,52 @@ function CategoriesSettings() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 space-y-3">
-        <h3 className="text-[11px] font-medium tracking-widest uppercase text-[var(--color-muted)]">
-          Add Category
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
-          <input
-            placeholder="Category name (e.g. Printful)"
-            value={createName}
-            onChange={(e) => setCreateName(e.target.value)}
-            className="bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-white)] placeholder:text-[var(--color-muted)] focus:outline-none"
-          />
-          <select
-            value={createParentId}
-            onChange={(e) => setCreateParentId(e.target.value)}
-            className="bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-white)] focus:outline-none"
-          >
-            <option value="">Select parent (required)</option>
-            {groupedCategoryOptions.map((group) => (
-              <optgroup key={group.label} label={group.label}>
-                {group.options.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-          <button
-            onClick={submitCreate}
-            disabled={!createName.trim() || !createParentId || createCategory.isPending}
-            className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[var(--color-cherry-pink)] text-[var(--color-deep-blue)] rounded-xl text-sm font-medium disabled:opacity-40"
-          >
-            <Plus size={14} /> Add
-          </button>
+      {isAdmin && (
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 space-y-3">
+          <h3 className="text-[11px] font-medium tracking-widest uppercase text-[var(--color-muted)]">
+            Add Category
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
+            <input
+              placeholder="Category name (e.g. Printful)"
+              value={createName}
+              onChange={(e) => setCreateName(e.target.value)}
+              className="bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-white)] placeholder:text-[var(--color-muted)] focus:outline-none"
+            />
+            <select
+              value={createParentId}
+              onChange={(e) => setCreateParentId(e.target.value)}
+              className="bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-white)] focus:outline-none"
+            >
+              <option value="">Select parent (required)</option>
+              {groupedCategoryOptions.map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.options.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <button
+              onClick={submitCreate}
+              disabled={!createName.trim() || !createParentId || createCategory.isPending}
+              className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[var(--color-cherry-pink)] text-[var(--color-deep-blue)] rounded-xl text-sm font-medium disabled:opacity-40"
+            >
+              <Plus size={14} /> Add
+            </button>
+          </div>
+          {createParentId && (
+            <p className="text-xs text-[var(--color-muted)]">
+              Parent path: {categoryPathById.get(createParentId)}
+            </p>
+          )}
+          {categoryError && (
+            <p className="text-xs text-[var(--color-coral)]">{categoryError}</p>
+          )}
         </div>
-        {createParentId && (
-          <p className="text-xs text-[var(--color-muted)]">
-            Parent path: {categoryPathById.get(createParentId)}
-          </p>
-        )}
-        {categoryError && (
-          <p className="text-xs text-[var(--color-coral)]">{categoryError}</p>
-        )}
-      </div>
+      )}
 
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 space-y-2">
         <h3 className="text-[11px] font-medium tracking-widest uppercase text-[var(--color-muted)]">
@@ -398,6 +405,7 @@ function CategoriesSettings() {
 }
 
 function RulesSettings() {
+  const isAdmin = useIsAdmin();
   const utils = trpc.useUtils();
   const { data: rules } = trpc.categories.listRules.useQuery();
   const { data: accounts } = trpc.accounts.list.useQuery();
@@ -494,57 +502,60 @@ function RulesSettings() {
   return (
     <div className="space-y-4">
       {/* Add rule form */}
-      <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 space-y-3">
-        <h3 className="text-[11px] font-medium tracking-widest uppercase text-[var(--color-muted)]">
-          Add Rule
-        </h3>
-        <div className="flex gap-2 flex-wrap">
-          <input
-            placeholder="Pattern (keyword or regex)"
-            value={pattern}
-            onChange={(e) => setPattern(e.target.value)}
-            className="flex-1 min-w-48 bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl px-4 py-2 text-sm text-[var(--color-white)] placeholder:text-[var(--color-muted)] focus:outline-none"
-          />
-          <select
-            value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
-            className="bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl px-4 py-2 text-sm text-[var(--color-white)] focus:outline-none"
-          >
-            <option value="">Category</option>
-            {groupedCategoryOptions.map((group) => (
-              <optgroup key={group.label} label={group.label}>
-                {group.options.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-          <button
-            onClick={() => addRule.mutate({ pattern, categoryId })}
-            disabled={!pattern || !categoryId || addRule.isPending}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[var(--color-cherry-pink)] text-[var(--color-deep-blue)] rounded-xl text-sm font-medium disabled:opacity-40 hover:opacity-90 transition"
-          >
-            <Plus size={14} /> Add
-          </button>
-          <button
-            onClick={() => applyRules.mutate({ onlyUncategorized: true })}
-            disabled={applyRules.isPending}
-            className="px-4 py-2 bg-[var(--color-surface-hover)] border border-[var(--color-border)] text-[var(--color-soft-blue)] rounded-xl text-sm font-medium disabled:opacity-40 hover:text-[var(--color-white)] transition-colors"
-          >
-            {applyRules.isPending ? 'Applying...' : 'Apply rules to uncategorized'}
-          </button>
+      {isAdmin && (
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 space-y-3">
+          <h3 className="text-[11px] font-medium tracking-widest uppercase text-[var(--color-muted)]">
+            Add Rule
+          </h3>
+          <div className="flex gap-2 flex-wrap">
+            <input
+              placeholder="Pattern (keyword or regex)"
+              value={pattern}
+              onChange={(e) => setPattern(e.target.value)}
+              className="flex-1 min-w-48 bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl px-4 py-2 text-sm text-[var(--color-white)] placeholder:text-[var(--color-muted)] focus:outline-none"
+            />
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl px-4 py-2 text-sm text-[var(--color-white)] focus:outline-none"
+            >
+              <option value="">Category</option>
+              {groupedCategoryOptions.map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.options.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <button
+              onClick={() => addRule.mutate({ pattern, categoryId })}
+              disabled={!pattern || !categoryId || addRule.isPending}
+              className="flex items-center gap-1.5 px-4 py-2 bg-[var(--color-cherry-pink)] text-[var(--color-deep-blue)] rounded-xl text-sm font-medium disabled:opacity-40 hover:opacity-90 transition"
+            >
+              <Plus size={14} /> Add
+            </button>
+            <button
+              onClick={() => applyRules.mutate({ onlyUncategorized: true })}
+              disabled={applyRules.isPending}
+              className="px-4 py-2 bg-[var(--color-surface-hover)] border border-[var(--color-border)] text-[var(--color-soft-blue)] rounded-xl text-sm font-medium disabled:opacity-40 hover:text-[var(--color-white)] transition-colors"
+            >
+              {applyRules.isPending ? 'Applying...' : 'Apply rules to uncategorized'}
+            </button>
+          </div>
+          {ruleMessage && (
+            <p className="text-xs text-[var(--color-muted)]">{ruleMessage}</p>
+          )}
         </div>
-        {ruleMessage && (
-          <p className="text-xs text-[var(--color-muted)]">{ruleMessage}</p>
-        )}
-      </div>
+      )}
 
-      <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 space-y-3">
-        <h3 className="text-[11px] font-medium tracking-widest uppercase text-[var(--color-muted)]">
-          Recurring Detection
-        </h3>
+      {isAdmin && (
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 space-y-3">
+          <h3 className="text-[11px] font-medium tracking-widest uppercase text-[var(--color-muted)]">
+            Recurring Detection
+          </h3>
         <div className="flex items-center gap-2 flex-wrap">
           <label className="text-xs text-[var(--color-muted)]">
             Lookback (months)
@@ -615,6 +626,7 @@ function RulesSettings() {
           </div>
         )}
       </div>
+      )}
 
       {/* Rules list */}
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl overflow-hidden">
@@ -640,14 +652,16 @@ function RulesSettings() {
                   <td className="px-4 py-3 text-xs text-[var(--color-muted)]">
                     {(r.categoryId ? categoryPathById.get(r.categoryId) : null) ?? r.category?.name}
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => deleteRule.mutate({ id: r.id })}
-                      className="text-[var(--color-muted)] hover:text-[var(--color-coral)] transition-colors"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
+                  {isAdmin && (
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => deleteRule.mutate({ id: r.id })}
+                        className="text-[var(--color-muted)] hover:text-[var(--color-coral)] transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -659,6 +673,7 @@ function RulesSettings() {
 }
 
 function BudgetsSettings() {
+  const isAdmin = useIsAdmin();
   const utils = trpc.useUtils();
   const today = new Date().toISOString().slice(0, 10);
   const monthStart = new Date(
@@ -726,50 +741,52 @@ function BudgetsSettings() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 space-y-3">
-        <h3 className="text-[11px] font-medium tracking-widest uppercase text-[var(--color-muted)]">
-          Monthly Budgets (CAD)
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px_auto] gap-2">
-          <select
-            value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
-            className="bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-white)] focus:outline-none"
-          >
-            <option value="">Select expense category</option>
-            {groupedExpenseOptions.map((group) => (
-              <optgroup key={group.label} label={group.label}>
-                {group.options.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-          <input
-            type="number"
-            min="0.01"
-            step="0.01"
-            placeholder="Monthly CAD"
-            value={monthlyCad}
-            onChange={(e) => setMonthlyCad(e.target.value)}
-            className="bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-white)] placeholder:text-[var(--color-muted)] focus:outline-none"
-          />
-          <button
-            type="button"
-            onClick={submitBudget}
-            disabled={upsertBudget.isPending}
-            className="px-4 py-2 bg-[var(--color-cherry-pink)] text-[var(--color-deep-blue)] rounded-xl text-sm font-medium disabled:opacity-40"
-          >
-            {upsertBudget.isPending ? 'Saving...' : 'Save budget'}
-          </button>
+      {isAdmin && (
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 space-y-3">
+          <h3 className="text-[11px] font-medium tracking-widest uppercase text-[var(--color-muted)]">
+            Monthly Budgets (CAD)
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px_auto] gap-2">
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-white)] focus:outline-none"
+            >
+              <option value="">Select expense category</option>
+              {groupedExpenseOptions.map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.options.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              placeholder="Monthly CAD"
+              value={monthlyCad}
+              onChange={(e) => setMonthlyCad(e.target.value)}
+              className="bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm text-[var(--color-white)] placeholder:text-[var(--color-muted)] focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={submitBudget}
+              disabled={upsertBudget.isPending}
+              className="px-4 py-2 bg-[var(--color-cherry-pink)] text-[var(--color-deep-blue)] rounded-xl text-sm font-medium disabled:opacity-40"
+            >
+              {upsertBudget.isPending ? 'Saving...' : 'Save budget'}
+            </button>
+          </div>
+          <p className="text-xs text-[var(--color-muted)]">
+            Budgets compare against expenses in the selected category and its child categories.
+          </p>
+          {budgetMessage && <p className="text-xs text-[var(--color-muted)]">{budgetMessage}</p>}
         </div>
-        <p className="text-xs text-[var(--color-muted)]">
-          Budgets compare against expenses in the selected category and its child categories.
-        </p>
-        {budgetMessage && <p className="text-xs text-[var(--color-muted)]">{budgetMessage}</p>}
-      </div>
+      )}
 
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 space-y-3">
         <h3 className="text-[11px] font-medium tracking-widest uppercase text-[var(--color-muted)]">
@@ -862,21 +879,23 @@ function BudgetsSettings() {
                     <td className={`px-4 py-3 text-xs uppercase tracking-wider ${statusClass}`}>
                       {item.status.replace('_', ' ')} ({item.utilizationPct.toFixed(1)}%)
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const ok = window.confirm(
-                            `Delete budget for "${item.categoryName}"?`,
-                          );
-                          if (!ok) return;
-                          deleteBudget.mutate({ id: item.id });
-                        }}
-                        className="text-[var(--color-muted)] hover:text-[var(--color-coral)] transition-colors"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
+                    {isAdmin && (
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const ok = window.confirm(
+                              `Delete budget for "${item.categoryName}"?`,
+                            );
+                            if (!ok) return;
+                            deleteBudget.mutate({ id: item.id });
+                          }}
+                          className="text-[var(--color-muted)] hover:text-[var(--color-coral)] transition-colors"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}

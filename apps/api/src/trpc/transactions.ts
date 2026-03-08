@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { eq, and, gte, lte, like, sql, desc, asc, inArray } from 'drizzle-orm';
-import { router, protectedProcedure } from './trpc.js';
+import { router, protectedProcedure, adminProcedure } from './trpc.js';
 import { db } from '../db/index.js';
 import { categories, transactions } from '../db/schema.js';
 import { convertToCad } from '../services/currencyConverter.js';
@@ -140,13 +140,17 @@ function toCsv(rows: string[][]): string {
 }
 
 export const transactionsRouter = router({
-  list: protectedProcedure.input(transactionFiltersSchema).query(async ({ input }) => {
+  list: protectedProcedure.input(transactionFiltersSchema).query(async ({ input, ctx }) => {
     const requestedCategoryIds = [
       ...(input.categoryId ? [input.categoryId] : []),
       ...input.categoryIds,
     ];
     const expandedCategoryIds = await expandCategoryFilterIds(requestedCategoryIds);
     const conditions = buildTransactionConditions(input, expandedCategoryIds);
+
+    if (ctx.role === 'partner') {
+      conditions.push(eq(transactions.hiddenFromPartner, false));
+    }
 
     const orderCol =
       input.sortBy === 'date'
@@ -206,13 +210,17 @@ export const transactionsRouter = router({
 
   exportCsv: protectedProcedure
     .input(transactionExportSchema)
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const requestedCategoryIds = [
         ...(input.categoryId ? [input.categoryId] : []),
         ...input.categoryIds,
       ];
       const expandedCategoryIds = await expandCategoryFilterIds(requestedCategoryIds);
       const conditions = buildTransactionConditions(input, expandedCategoryIds);
+
+      if (ctx.role === 'partner') {
+        conditions.push(eq(transactions.hiddenFromPartner, false));
+      }
       const orderFn = input.sortOrder === 'asc' ? asc : desc;
       const orderCol =
         input.sortBy === 'date'
@@ -298,7 +306,7 @@ export const transactionsRouter = router({
       };
     }),
 
-  detectRecurring: protectedProcedure
+  detectRecurring: adminProcedure
     .input(detectRecurringSchema)
     .mutation(async ({ input }) => {
       const now = new Date();
@@ -354,7 +362,7 @@ export const transactionsRouter = router({
       });
     }),
 
-  create: protectedProcedure
+  create: adminProcedure
     .input(createTransactionSchema)
     .mutation(async ({ input }) => {
       const conversion =
@@ -377,7 +385,7 @@ export const transactionsRouter = router({
       return tx!;
     }),
 
-  update: protectedProcedure.input(updateTransactionSchema).mutation(async ({ input }) => {
+  update: adminProcedure.input(updateTransactionSchema).mutation(async ({ input }) => {
     const { id, ...data } = input;
     const updateData: Record<string, unknown> = { ...data, updatedAt: new Date() };
     if (data.amount !== undefined) updateData.amount = String(data.amount);
@@ -414,13 +422,24 @@ export const transactionsRouter = router({
     return tx!;
   }),
 
-  delete: protectedProcedure
+  delete: adminProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ input }) => {
       await db.delete(transactions).where(eq(transactions.id, input.id));
     }),
 
-  bulkUpdate: protectedProcedure
+  toggleHidden: adminProcedure
+    .input(z.object({ id: z.string().uuid(), hidden: z.boolean() }))
+    .mutation(async ({ input }) => {
+      const [tx] = await db
+        .update(transactions)
+        .set({ hiddenFromPartner: input.hidden, updatedAt: new Date() })
+        .where(eq(transactions.id, input.id))
+        .returning();
+      return tx!;
+    }),
+
+  bulkUpdate: adminProcedure
     .input(
       z.object({
         ids: z.array(z.string().uuid()),

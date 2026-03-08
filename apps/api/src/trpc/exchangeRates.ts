@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { and, gte, lte, eq, desc } from 'drizzle-orm';
-import { router, protectedProcedure } from './trpc.js';
+import { router, protectedProcedure, adminProcedure } from './trpc.js';
 import { db } from '../db/index.js';
 import { exchangeRates } from '../db/schema.js';
 import { fetchAndCacheRates } from '../services/currencyConverter.js';
@@ -36,7 +36,7 @@ export const exchangeRatesRouter = router({
     },
   ),
 
-  refresh: protectedProcedure.mutation(async () => {
+  refresh: adminProcedure.mutation(async () => {
     const today = new Date().toISOString().split('T')[0]!;
     await fetchAndCacheRates(today);
     return { ok: true };

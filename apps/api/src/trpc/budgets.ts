@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { and, asc, eq, gte, inArray, lt, lte } from 'drizzle-orm';
-import { router, protectedProcedure } from './trpc.js';
+import { router, protectedProcedure, adminProcedure } from './trpc.js';
 import { db } from '../db/index.js';
 import { budgets, transactions } from '../db/schema.js';
 
@@ -53,7 +53,7 @@ export const budgetsRouter = router({
     }));
   }),
 
-  upsert: protectedProcedure.input(upsertBudgetSchema).mutation(async ({ input }) => {
+  upsert: adminProcedure.input(upsertBudgetSchema).mutation(async ({ input }) => {
     const [row] = await db
       .insert(budgets)
       .values({
@@ -77,7 +77,7 @@ export const budgetsRouter = router({
     };
   }),
 
-  delete: protectedProcedure.input(deleteBudgetSchema).mutation(async ({ input }) => {
+  delete: adminProcedure.input(deleteBudgetSchema).mutation(async ({ input }) => {
     await db.delete(budgets).where(eq(budgets.id, input.id));
   }),
 

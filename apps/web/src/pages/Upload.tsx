@@ -4,8 +4,22 @@ import { trpc } from '@/lib/trpc';
 import { formatCAD } from '@/lib/formatCurrency';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/toast';
+import { useIsAdmin } from '@/hooks/useRole';
 
 export function UploadPage() {
+  const isAdmin = useIsAdmin();
+
+  if (!isAdmin) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-xl font-semibold text-[var(--color-white)]">Upload Statement</h1>
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-8 text-center text-[var(--color-muted)] text-sm">
+          Upload is only available for admin users.
+        </div>
+      </div>
+    );
+  }
+
   const { toast } = useToast();
   const [file, setFile] = useState<File | null>(null);
   const [accountId, setAccountId] = useState('');

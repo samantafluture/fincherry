@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { and, eq } from 'drizzle-orm';
-import { router, protectedProcedure } from './trpc.js';
+import { router, protectedProcedure, adminProcedure } from './trpc.js';
 import { db } from '../db/index.js';
 import {
   uploads,
@@ -191,7 +191,7 @@ export const uploadsRouter = router({
       });
     }),
 
-  confirm: protectedProcedure
+  confirm: adminProcedure
     .input(
       z.object({
         uploadId: z.string().uuid(),

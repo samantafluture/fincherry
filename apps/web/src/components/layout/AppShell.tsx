@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { trpc } from '@/lib/trpc';
+import { useRole } from '@/hooks/useRole';
 
 const NAV_ITEMS: Array<{
   to: string;
@@ -29,6 +30,7 @@ const NAV_ITEMS: Array<{
 export function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
+  const role = useRole();
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const logout = trpc.auth.logout.useMutation({
     onSuccess: () => navigate('/login'),
@@ -46,9 +48,16 @@ export function AppShell() {
       >
         {/* Logo */}
         <div className="px-6 py-5 border-b border-[var(--color-border)]">
-          <NavLink to="/" className="text-lg font-semibold tracking-tight text-[var(--color-white)]">
-            Fin<span className="text-[var(--color-cherry-pink)]">Cherry</span>
-          </NavLink>
+          <div className="flex items-center gap-2">
+            <NavLink to="/" className="text-lg font-semibold tracking-tight text-[var(--color-white)]">
+              Fin<span className="text-[var(--color-cherry-pink)]">Cherry</span>
+            </NavLink>
+            {role === 'partner' && (
+              <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-[var(--color-soft-blue)]/20 text-[var(--color-soft-blue)]">
+                Partner
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Nav links */}
@@ -120,9 +129,16 @@ export function AppShell() {
 
         {/* Mobile header */}
         <header className="lg:hidden glass sticky top-0 z-10 flex items-center justify-between px-5 py-3 border-b border-[var(--color-border)]">
-          <NavLink to="/" className="text-base font-semibold text-[var(--color-white)]">
-            Fin<span className="text-[var(--color-cherry-pink)]">Cherry</span>
-          </NavLink>
+          <div className="flex items-center gap-2">
+            <NavLink to="/" className="text-base font-semibold text-[var(--color-white)]">
+              Fin<span className="text-[var(--color-cherry-pink)]">Cherry</span>
+            </NavLink>
+            {role === 'partner' && (
+              <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-[var(--color-soft-blue)]/20 text-[var(--color-soft-blue)]">
+                Partner
+              </span>
+            )}
+          </div>
           <NavLink
             to="/settings"
             className="text-[var(--color-muted)] hover:text-[var(--color-white)] transition-colors"

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { trpc } from '@/lib/trpc';
+import { useIsAdmin } from '@/hooks/useRole';
 import { formatCAD, currencySymbol } from '@/lib/formatCurrency';
 import {
   buildCategoryPathMap,
@@ -43,6 +44,7 @@ const VIRTUAL_ROW_HEIGHT = 78;
 
 export function TransactionsPage() {
   const { toast } = useToast();
+  const isAdmin = useIsAdmin();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [searchInput, setSearchInput] = useState('');
@@ -312,6 +314,16 @@ export function TransactionsPage() {
     },
     onError: (err) => {
       toast({ variant: 'error', title: 'CSV export failed', description: err.message });
+    },
+  });
+
+  const toggleHidden = trpc.transactions.toggleHidden.useMutation({
+    onSuccess: () => {
+      utils.transactions.list.invalidate();
+      toast({ variant: 'success', title: 'Visibility updated', durationMs: 2200 });
+    },
+    onError: (err) => {
+      toast({ variant: 'error', title: 'Toggle failed', description: err.message });
     },
   });
 
@@ -588,14 +600,16 @@ export function TransactionsPage() {
         >
           {exportCsv.isPending ? 'Exporting...' : 'Export CSV'}
         </button>
-        <button
-          type="button"
-          onClick={openCreateDialog}
-          disabled={!defaultAccount}
-          className="bg-[var(--color-cherry-pink)] text-[var(--color-deep-blue)] rounded-xl px-4 py-2 text-sm font-medium disabled:opacity-50"
-        >
-          Add transaction
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={openCreateDialog}
+            disabled={!defaultAccount}
+            className="bg-[var(--color-cherry-pink)] text-[var(--color-deep-blue)] rounded-xl px-4 py-2 text-sm font-medium disabled:opacity-50"
+          >
+            Add transaction
+          </button>
+        )}
         <label className="flex items-center gap-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-xs text-[var(--color-muted)]">
           Rows
           <select
@@ -721,12 +735,13 @@ export function TransactionsPage() {
                   </span>
                   <select
                     value={tx.categoryId ?? ''}
+                    disabled={!isAdmin}
                     onChange={(e) => {
                       const categoryId = e.target.value;
                       if (!categoryId || categoryId === tx.categoryId) return;
                       updateTx.mutate({ id: tx.id, categoryId });
                     }}
-                    className="flex-1 min-w-0 bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-lg px-2 py-1 text-[11px] text-[var(--color-white)] focus:outline-none focus:ring-1 focus:ring-[var(--color-cherry-pink)]"
+                    className="flex-1 min-w-0 bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-lg px-2 py-1 text-[11px] text-[var(--color-white)] focus:outline-none focus:ring-1 focus:ring-[var(--color-cherry-pink)] disabled:opacity-60"
                   >
                     <option value="">
                       {tx.categoryId
@@ -748,39 +763,55 @@ export function TransactionsPage() {
                     ))}
                   </select>
                 </div>
-                <div className="flex justify-end gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      openEditDialog({
-                        id: tx.id,
-                        date: tx.date,
-                        description: tx.description,
-                        amount: tx.amount,
-                        currency: tx.currency,
-                        accountId: tx.accountId,
-                        categoryId: tx.categoryId ?? null,
-                      })
-                    }
-                    className="px-2.5 py-1 rounded-md text-[11px] bg-[var(--color-surface-hover)] text-[var(--color-soft-blue)] hover:text-[var(--color-white)]"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    disabled={deletingTx}
-                    onClick={() => {
-                      const ok = window.confirm(
-                        'Delete this transaction? This cannot be undone.',
-                      );
-                      if (!ok) return;
-                      deleteTx.mutate({ id: tx.id });
-                    }}
-                    className="px-2.5 py-1 rounded-md text-[11px] bg-[var(--color-surface-hover)] text-[var(--color-coral)] hover:text-[var(--color-white)] disabled:opacity-50"
-                  >
-                    Delete
-                  </button>
-                </div>
+                {isAdmin && (
+                  <div className="flex justify-end gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        toggleHidden.mutate({ id: tx.id, hidden: !tx.hiddenFromPartner })
+                      }
+                      className={`px-2.5 py-1 rounded-md text-[11px] bg-[var(--color-surface-hover)] ${
+                        tx.hiddenFromPartner
+                          ? 'text-[var(--color-coral)]'
+                          : 'text-[var(--color-muted)]'
+                      } hover:text-[var(--color-white)]`}
+                      title={tx.hiddenFromPartner ? 'Visible to partner: No' : 'Visible to partner: Yes'}
+                    >
+                      {tx.hiddenFromPartner ? '⚫' : '👁'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openEditDialog({
+                          id: tx.id,
+                          date: tx.date,
+                          description: tx.description,
+                          amount: tx.amount,
+                          currency: tx.currency,
+                          accountId: tx.accountId,
+                          categoryId: tx.categoryId ?? null,
+                        })
+                      }
+                      className="px-2.5 py-1 rounded-md text-[11px] bg-[var(--color-surface-hover)] text-[var(--color-soft-blue)] hover:text-[var(--color-white)]"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      disabled={deletingTx}
+                      onClick={() => {
+                        const ok = window.confirm(
+                          'Delete this transaction? This cannot be undone.',
+                        );
+                        if (!ok) return;
+                        deleteTx.mutate({ id: tx.id });
+                      }}
+                      className="px-2.5 py-1 rounded-md text-[11px] bg-[var(--color-surface-hover)] text-[var(--color-coral)] hover:text-[var(--color-white)] disabled:opacity-50"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -844,12 +875,13 @@ export function TransactionsPage() {
                       <td className="px-4 py-3">
                         <select
                           value={tx.categoryId ?? ''}
+                          disabled={!isAdmin}
                           onChange={(e) => {
                             const categoryId = e.target.value;
                             if (!categoryId || categoryId === tx.categoryId) return;
                             updateTx.mutate({ id: tx.id, categoryId });
                           }}
-                          className="w-full bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-lg px-2 py-1 text-xs text-[var(--color-white)] focus:outline-none focus:ring-1 focus:ring-[var(--color-cherry-pink)]"
+                          className="w-full bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-lg px-2 py-1 text-xs text-[var(--color-white)] focus:outline-none focus:ring-1 focus:ring-[var(--color-cherry-pink)] disabled:opacity-60"
                         >
                           <option value="">
                             {tx.categoryId
@@ -889,39 +921,55 @@ export function TransactionsPage() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex gap-1.5 justify-end">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              openEditDialog({
-                                id: tx.id,
-                                date: tx.date,
-                                description: tx.description,
-                                amount: tx.amount,
-                                currency: tx.currency,
-                                accountId: tx.accountId,
-                                categoryId: tx.categoryId ?? null,
-                              })
-                            }
-                            className="px-2 py-1 rounded-md text-[11px] bg-[var(--color-surface-hover)] text-[var(--color-soft-blue)] hover:text-[var(--color-white)]"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            disabled={deletingTx}
-                            onClick={() => {
-                              const ok = window.confirm(
-                                'Delete this transaction? This cannot be undone.',
-                              );
-                              if (!ok) return;
-                              deleteTx.mutate({ id: tx.id });
-                            }}
-                            className="px-2 py-1 rounded-md text-[11px] bg-[var(--color-surface-hover)] text-[var(--color-coral)] hover:text-[var(--color-white)] disabled:opacity-50"
-                          >
-                            Delete
-                          </button>
-                        </div>
+                        {isAdmin && (
+                          <div className="flex gap-1.5 justify-end">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                toggleHidden.mutate({ id: tx.id, hidden: !tx.hiddenFromPartner })
+                              }
+                              className={`px-2 py-1 rounded-md text-[11px] bg-[var(--color-surface-hover)] ${
+                                tx.hiddenFromPartner
+                                  ? 'text-[var(--color-coral)]'
+                                  : 'text-[var(--color-muted)]'
+                              } hover:text-[var(--color-white)]`}
+                              title={tx.hiddenFromPartner ? 'Hidden from partner' : 'Visible to partner'}
+                            >
+                              {tx.hiddenFromPartner ? '⚫' : '👁'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openEditDialog({
+                                  id: tx.id,
+                                  date: tx.date,
+                                  description: tx.description,
+                                  amount: tx.amount,
+                                  currency: tx.currency,
+                                  accountId: tx.accountId,
+                                  categoryId: tx.categoryId ?? null,
+                                })
+                              }
+                              className="px-2 py-1 rounded-md text-[11px] bg-[var(--color-surface-hover)] text-[var(--color-soft-blue)] hover:text-[var(--color-white)]"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              disabled={deletingTx}
+                              onClick={() => {
+                                const ok = window.confirm(
+                                  'Delete this transaction? This cannot be undone.',
+                                );
+                                if (!ok) return;
+                                deleteTx.mutate({ id: tx.id });
+                              }}
+                              className="px-2 py-1 rounded-md text-[11px] bg-[var(--color-surface-hover)] text-[var(--color-coral)] hover:text-[var(--color-white)] disabled:opacity-50"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );

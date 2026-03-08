@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { eq, inArray, sql } from 'drizzle-orm';
-import { router, protectedProcedure } from './trpc.js';
+import { router, protectedProcedure, adminProcedure } from './trpc.js';
 import { db } from '../db/index.js';
 import { accounts, transactions, goalSnapshots } from '../db/schema.js';
 
@@ -89,14 +89,14 @@ export const accountsRouter = router({
       return account;
     }),
 
-  create: protectedProcedure
+  create: adminProcedure
     .input(createAccountSchema)
     .mutation(async ({ input }) => {
       const [account] = await db.insert(accounts).values(input).returning();
       return account!;
     }),
 
-  update: protectedProcedure
+  update: adminProcedure
     .input(updateAccountSchema)
     .mutation(async ({ input }) => {
       const { id, ...data } = input;
@@ -109,7 +109,7 @@ export const accountsRouter = router({
       return account;
     }),
 
-  delete: protectedProcedure
+  delete: adminProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ input }) => {
       await db.delete(accounts).where(eq(accounts.id, input.id));

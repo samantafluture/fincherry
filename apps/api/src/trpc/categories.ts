@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { eq, isNull, or } from 'drizzle-orm';
-import { router, protectedProcedure } from './trpc.js';
+import { router, protectedProcedure, adminProcedure } from './trpc.js';
 import { db } from '../db/index.js';
 import { categories, categorizationRules, transactions } from '../db/schema.js';
 import { categorizerService } from '../services/categorizer.js';
@@ -47,7 +47,7 @@ export const categoriesRouter = router({
     return buildTree(null).filter((root) => ACTIVE_ROOTS.has(root.name));
   }),
 
-  create: protectedProcedure
+  create: adminProcedure
     .input(
       z.object({
         name: z.string().min(1).max(100),
@@ -91,7 +91,7 @@ export const categoriesRouter = router({
       return category!;
     }),
 
-  update: protectedProcedure
+  update: adminProcedure
     .input(
       z.object({
         id: z.string().uuid(),
@@ -180,7 +180,7 @@ export const categoriesRouter = router({
       return category!;
     }),
 
-  delete: protectedProcedure
+  delete: adminProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ input }) => {
       const category = await db.query.categories.findFirst({
@@ -241,7 +241,7 @@ export const categoriesRouter = router({
     });
   }),
 
-  addRule: protectedProcedure
+  addRule: adminProcedure
     .input(
       z.object({
         pattern: z.string().min(1).max(200),
@@ -265,7 +265,7 @@ export const categoriesRouter = router({
       }
     }),
 
-  applyRules: protectedProcedure
+  applyRules: adminProcedure
     .input(z.object({ onlyUncategorized: z.boolean().default(true) }).default({ onlyUncategorized: true }))
     .mutation(async ({ input }) => {
       return categorizerService.applyRulesToExistingTransactions({
@@ -273,7 +273,7 @@ export const categoriesRouter = router({
       });
     }),
 
-  deleteRule: protectedProcedure
+  deleteRule: adminProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ input }) => {
       await db.delete(categorizationRules).where(eq(categorizationRules.id, input.id));

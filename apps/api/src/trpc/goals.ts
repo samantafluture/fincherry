@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { eq, desc } from 'drizzle-orm';
-import { router, protectedProcedure } from './trpc.js';
+import { router, protectedProcedure, adminProcedure } from './trpc.js';
 import { db } from '../db/index.js';
 import { goals, goalSnapshots } from '../db/schema.js';
 
@@ -59,7 +59,7 @@ export const goalsRouter = router({
       });
     }),
 
-  create: protectedProcedure.input(createGoalSchema).mutation(async ({ input }) => {
+  create: adminProcedure.input(createGoalSchema).mutation(async ({ input }) => {
     const [goal] = await db
       .insert(goals)
       .values({ ...input, targetAmount: String(input.targetAmount) })
@@ -67,7 +67,7 @@ export const goalsRouter = router({
     return goal!;
   }),
 
-  update: protectedProcedure
+  update: adminProcedure
     .input(createGoalSchema.partial().extend({ id: z.string().uuid() }))
     .mutation(async ({ input }) => {
       const { id, targetAmount, ...data } = input;
@@ -82,7 +82,7 @@ export const goalsRouter = router({
       return goal!;
     }),
 
-  delete: protectedProcedure
+  delete: adminProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ input }) => {
       await db.delete(goals).where(eq(goals.id, input.id));
@@ -176,7 +176,7 @@ export const goalsRouter = router({
       };
     }),
 
-  addSnapshot: protectedProcedure
+  addSnapshot: adminProcedure
     .input(
       z.object({
         goalId: z.string().uuid(),

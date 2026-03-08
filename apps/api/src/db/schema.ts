@@ -77,6 +77,7 @@ export const transactions = pgTable(
     sourceFile: varchar('source_file', { length: 255 }),
     uploadId: uuid('upload_id').references(() => uploads.id),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    hiddenFromPartner: boolean('hidden_from_partner').default(false).notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [

@@ -5,6 +5,7 @@ import { trpc, createTRPCClient } from '@/lib/trpc';
 import { AppShell } from '@/components/layout/AppShell';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { ToastProvider } from '@/components/ui/toast';
+import { RoleContext } from '@/hooks/useRole';
 
 const LoginPage = lazy(() =>
   import('@/pages/Login').then((m) => ({ default: m.LoginPage })),
@@ -52,7 +53,13 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
-  return <>{children}</>;
+  const role = data.role === 'partner' ? 'partner' : 'admin';
+
+  return (
+    <RoleContext.Provider value={role}>
+      {children}
+    </RoleContext.Provider>
+  );
 }
 
 export default function App() {
