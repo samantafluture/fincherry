@@ -6,7 +6,7 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_DIR"
 
 echo "==> Pulling latest changes"
-git pull origin main
+git fetch origin main && git reset --hard origin/main
 
 echo "==> Building Docker images..."
 docker compose -f docker-compose.prod.yml build api
