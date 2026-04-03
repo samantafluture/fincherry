@@ -1,17 +1,14 @@
-<!-- Auto-generated from Notion. Do not edit manually. -->
-<!-- Last sync: 2026-04-02T15:50:39.434Z -->
-<!-- Source: https://www.notion.so/83f6c83bb3a546cda0739e7f25382a9a -->
 # Project: FinCherry
 
-> Last synced to repo: 2026-04-03T20:15:01+00:00
-> Last agent update: 2026-04-02T14:44:00.000Z
+> Last synced to repo: 2026-04-03T22:20:01+00:00
+> Last agent update: 2026-04-03
 
 ## Active Sprint
 
 ### P0 — Must do now
-- [ ] Add ALL remaining bank statements to have full history #chore 👤 manual
-- [ ] Add and categorize Itaú Visa statement #chore 👤 manual
-- [ ] Finish categorizing Itaú account statement #chore 👤 manual
+- [ ] Finish categorizing Itaú account statement that was already added `[M]` #chore 👤 manual
+- [ ] Add and categorize Itaú Visa statement `[M]` #chore 👤 manual
+- [ ] Add ALL remaining bank statements to have full history `[L]` #chore 👤 manual
 
 ### P1 — Should do this week
 
