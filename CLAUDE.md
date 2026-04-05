@@ -1,199 +1,58 @@
-# CLAUDE.md — FinCherry Architectural Fence
+# FinCherry
 
-This file is the single source of truth for AI agents working on FinCherry.
-Read it completely before writing any code. Every rule here is a hard constraint,
-not a suggestion.
+Self-hosted personal finance dashboard. Multi-currency (CAD/BRL/EUR), AI insights via Gemini, PDF bank statement ingestion. Single-user passphrase auth with optional read-only partner access.
 
----
+## Stack
 
-## 1. What is FinCherry?
+TypeScript (strict), React 18 + Vite 6 + Tailwind v4 + shadcn/ui, Fastify 5 + tRPC v11, PostgreSQL 16, Drizzle ORM, Gemini 2.5 Flash, Zod, pnpm workspaces.
 
-FinCherry is a self-hosted personal finance dashboard. Multi-currency (CAD/BRL/EUR),
-AI-powered insights via Gemini, PDF bank statement ingestion with automatic
-categorization. Single-user passphrase auth with optional read-only partner access.
-
-**Design principles:** privacy-first (self-hosted, PII stripping), multi-currency
-normalization to CAD, AI-assisted but human-controlled.
-
----
-
-## 2. Technology Stack
-
-| Layer      | Technology                                  |
-| ---------- | ------------------------------------------- |
-| Monorepo   | pnpm workspaces (`apps/*`)                  |
-| Language   | TypeScript (strict mode)                    |
-| Frontend   | React 18, Vite 6, Tailwind v4, shadcn/ui   |
-| Routing    | React Router v7                             |
-| Data       | TanStack React Query v5                     |
-| Charts     | Recharts                                    |
-| Backend    | Fastify 5, tRPC v11                         |
-| ORM        | Drizzle ORM 0.38                            |
-| Database   | PostgreSQL 16                               |
-| AI         | Gemini 2.5 Flash (vision + JSON mode)       |
-| Validation | Zod                                         |
-| Auth       | bcryptjs + JWT (signed cookie)              |
-| Testing    | _(not yet configured)_                      |
-
-**Do NOT add** state management libraries (React Query + tRPC handles it),
-alternative CSS frameworks, or any dependency not listed above without explicit approval.
-
----
-
-## 3. Project Structure
+## Structure
 
 ```
-fincherry/
-├── apps/
-│   ├── api/                    # Fastify + tRPC backend
-│   │   └── src/
-│   │       ├── server.ts       # Entry point
-│   │       ├── trpc/           # tRPC routers (one per domain)
-│   │       │   ├── auth.ts
-│   │       │   ├── accounts.ts
-│   │       │   ├── transactions.ts
-│   │       │   ├── categories.ts
-│   │       │   ├── goals.ts
-│   │       │   ├── budgets.ts
-│   │       │   ├── ai.ts
-│   │       │   ├── uploads.ts
-│   │       │   ├── analytics.ts
-│   │       │   └── exchangeRates.ts
-│   │       ├── db/             # Drizzle schema, migrations, seed
-│   │       │   ├── schema.ts   # All tables defined here
-│   │       │   └── migrations/
-│   │       ├── routes/         # Non-tRPC routes (PDF uploads)
-│   │       ├── services/       # Business logic (AI, categorizer, currency, PII)
-│   │       └── utils/
-│   └── web/                    # React SPA
-│       └── src/
-│           ├── pages/          # Login, Dashboard, Transactions, Upload, Goals, AI, Settings
-│           ├── components/     # charts/, layout/, ui/
-│           ├── lib/            # trpc client, dateUtils, formatCurrency, categoryPaths
-│           ├── styles/         # globals.css (Tailwind + CSS custom properties)
-│           └── hooks/
-├── infra/                      # Docker Compose, nginx
-├── scripts/                    # db-backup.sh, db-restore.sh, check-web-bundle-size.mjs
-├── nginx/                      # Reverse proxy config
-├── docker-compose.yml          # Dev: db, api, nginx, certbot
-├── Dockerfile.prod             # Multi-stage production build
-└── .env.example
+apps/
+  api/src/
+    server.ts            # Entry point
+    trpc/                # Routers: auth, accounts, transactions, categories, goals, budgets, ai, uploads, analytics, exchangeRates
+    db/schema.ts         # All Drizzle tables
+    db/migrations/       # Drizzle migrations
+    services/            # Business logic (AI, categorizer, currency, PII stripper)
+    routes/              # Non-tRPC routes (PDF uploads)
+  web/src/
+    pages/               # Login, Dashboard, Transactions, Upload, Goals, AI, Settings
+    components/          # charts/, layout/, ui/
+    lib/                 # trpc client, dateUtils, formatCurrency, categoryPaths
+scripts/                 # db-backup.sh, db-restore.sh, check-web-bundle-size.mjs
+nginx/                   # Reverse proxy config
 ```
 
-**Where new code goes:**
-
-- New tRPC router? → `apps/api/src/trpc/routername.ts` + register in appRouter
-- New business logic? → `apps/api/src/services/`
-- New DB table? → `apps/api/src/db/schema.ts` + generate migration
-- New page? → `apps/web/src/pages/PageName.tsx` + add route
-- New component? → `apps/web/src/components/`
-- New hook? → `apps/web/src/hooks/useX.ts`
-
----
-
-## 4. Naming Conventions
-
-| Thing         | Convention     | Example                                 |
-| ------------- | -------------- | --------------------------------------- |
-| Files (API)   | camelCase      | `aiProvider.ts`, `piiStripper.ts`       |
-| Files (Web)   | PascalCase     | `Dashboard.tsx`, `TransactionRow.tsx`    |
-| tRPC routers  | camelCase      | `authRouter`, `transactionsRouter`      |
-| Variables     | camelCase      | `accountId`, `amountCad`                |
-| Types         | PascalCase     | `Transaction`, `CategoryNode`           |
-| CSS vars      | kebab-case     | `--color-deep-blue`, `--color-surface`  |
-| DB columns    | camelCase      | Drizzle maps to snake_case automatically |
-
----
-
-## 5. Key Patterns
-
-### tRPC Procedures
-- `publicProcedure` — no auth required (login)
-- `protectedProcedure` — JWT cookie validated, `ctx.user` available with `role` ('admin' | 'partner')
-- Input validated with Zod schemas
-- Error handling via `TRPCError`
-
-### Multi-Currency
-- All amounts stored in original currency AND `amountCad` (normalized)
-- `exchangeRate` stored per transaction
-- Display logic uses user's preferred currency
-
-### AI Integration
-- Gemini API with PII stripping before sending data
-- Vision mode for PDF parsing
-- JSON mode for structured responses (categorization, insights)
-- Bank-specific PDF parsers: Desjardins, Itaú, N26, Scotia
-
-### Auth
-- Single passphrase (bcrypt hash in env var)
-- Optional partner passphrase (read-only role)
-- JWT stored in signed HTTP-only cookie
-
----
-
-## 6. Commands Reference
+## Commands
 
 ```bash
-# Development
-pnpm install              # Install all dependencies
-pnpm dev:api              # Start API server (tsx watch)
-pnpm dev:web              # Start web dev server (Vite)
-
-# Build
-pnpm build                # Build all packages
-pnpm build:api            # TypeScript compile API
-pnpm build:web            # Vite build web
-
-# Database
-pnpm db:up                # Start PostgreSQL (Docker)
-pnpm db:push              # Push schema changes (dev)
-pnpm db:migrate           # Run migrations (production)
-pnpm db:generate          # Generate migration from schema diff
-pnpm db:seed              # Seed database
-pnpm db:studio            # Drizzle Studio (visual DB browser)
-pnpm db:backup            # Backup PostgreSQL
-pnpm db:restore           # Restore from backup
-
-# Quality
-pnpm --filter web lint    # ESLint web
-pnpm --filter api exec tsc --noEmit   # Typecheck API
-pnpm --filter web exec tsc --noEmit   # Typecheck web
-
-# Bundle
-pnpm web:bundle:check     # Check web bundle size
-pnpm web:bundle:report    # Generate bundle report
+pnpm dev:api             # API server (tsx watch)
+pnpm dev:web             # Web dev server (Vite)
+pnpm build               # Build all
+pnpm db:push             # Push schema (dev)
+pnpm db:generate         # Generate migration from diff
+pnpm db:migrate          # Run migrations (prod)
+pnpm db:studio           # Drizzle Studio
+pnpm db:backup           # Backup PostgreSQL
+pnpm db:restore          # Restore from backup
 ```
 
----
+## Key Patterns
 
-## 7. Do NOT List
+- **Multi-currency:** amounts stored in original currency + `amountCad` (normalized). Exchange rate per transaction.
+- **AI:** Gemini with PII stripping before sending. Vision mode for PDFs. JSON mode for categorization/insights.
+- **PDF parsers:** bank-specific — Desjardins, Itau, N26, Scotia (`apps/api/src/services/`).
+- **Auth:** bcrypt passphrase -> JWT in signed HTTP-only cookie. Partner = read-only role.
+- **tRPC:** `publicProcedure` (no auth), `protectedProcedure` (JWT validated, `ctx.user` with role).
 
-- **No `any`** — use `unknown` and narrow, or define a proper type
-- **No direct DB queries in tRPC routers** — delegate to services
-- **No PII in AI prompts** — always run through PII stripper first
-- **No hardcoded currencies** — use the currency system (account → transaction → display)
-- **No raw SQL** — use Drizzle ORM query builder
-- **No `console.log`** — use Fastify logger
-- **No storing secrets in code** — use `.env` (never commit `.env`)
-- **No business logic in route/router files** — keep routers thin
+## Deploy
 
----
+Docker multi-stage build -> VPS. Env: `DB_PASSWORD`, `DATABASE_URL`, `AUTH_PASSPHRASE_HASH`, `JWT_SECRET`. See `.env.example`.
 
-## 8. Environment Variables
+## Rules
 
-Required: `DB_PASSWORD`, `DATABASE_URL`, `AUTH_PASSPHRASE_HASH`, `JWT_SECRET`
-Optional: `PARTNER_PASSPHRASE_HASH`, `GEMINI_API_KEY`, `GEMINI_INSIGHTS_MODEL`, `GEMINI_CATEGORIZATION_MODEL`
-See `.env.example` for full list.
-
----
-
-## 9. Git & Workflow
-
-- **Commits:** conventional commits (`feat:`, `fix:`, `chore:`, etc.)
-- **Before committing:** typecheck both packages, build
-- **Deploy:** Docker multi-stage build → VPS
-
----
-
-## Task Management
-Tasks: .claude/tasks.md
+- No `any`, no raw SQL (use Drizzle), no PII in AI prompts, no `console.log` (use Fastify logger)
+- No business logic in routers — delegate to services
+- Conventional commits
