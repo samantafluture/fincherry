@@ -39,8 +39,8 @@ COPY --from=api-build /app/apps/api/dist apps/api/dist
 
 RUN mkdir -p /app/apps/api/uploads
 
-# Non-root user — node (UID 1000:GID 1000) is built into the base image
-RUN chown -R node:node /app/apps/api/uploads
+# chown to 1001:1001 matching VPS host sam — docker-compose user: overrides USER
+RUN chown -R 1001:1001 /app/apps/api/uploads
 USER node
 
 WORKDIR /app/apps/api
