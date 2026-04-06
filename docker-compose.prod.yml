@@ -6,6 +6,7 @@ services:
       dockerfile: Dockerfile.prod
       target: api
     restart: unless-stopped
+    user: "1000:1000"  # match host sam (UID 1000) + node user in container
     environment:
       NODE_ENV: production
       PORT: 3000
