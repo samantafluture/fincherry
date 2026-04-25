@@ -39,8 +39,12 @@ COPY --from=api-build /app/apps/api/dist apps/api/dist
 
 RUN mkdir -p /app/apps/api/uploads
 
-# chown to 1001:1001 matching VPS host sam — docker-compose user: overrides USER
-RUN chown -R 1001:1001 /app/apps/api/uploads
+# Remap node user from default UID 1000 → 1001 to match VPS host sam,
+# then chown writable paths so the user can write at runtime.
+RUN deluser node \
+  && addgroup -g 1001 node \
+  && adduser -D -u 1001 -G node -h /home/node node \
+  && chown -R 1001:1001 /home/node /app/apps/api/uploads
 USER node
 
 WORKDIR /app/apps/api
